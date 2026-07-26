@@ -31,15 +31,11 @@ def test_windows_batch_launch_command() -> None:
         platform_name="nt",
         comspec=r"C:\Windows\System32\cmd.exe",
     )
-    assert command[:4] == [
-        r"C:\Windows\System32\cmd.exe",
-        "/d",
-        "/s",
-        "/c",
-    ]
-    assert "call" in command[4]
-    assert "vivado.bat" in command[4]
-    assert "-mode tcl" in command[4]
+    assert isinstance(command, str)
+    assert command.startswith(r"C:\Windows\System32\cmd.exe /d /s /c ")
+    assert command.endswith('"')
+    assert r"C:\Xilinx\Vivado\2025.2\bin\vivado.bat" in command
+    assert "-mode tcl" in command
 
 
 def test_direct_executable_launch_command() -> None:

@@ -190,11 +190,12 @@ def build_launch_command(
     *,
     platform_name: str | None = None,
     comspec: str | None = None,
-) -> list[str]:
+) -> str | list[str]:
     """Build the platform-specific subprocess command.
 
     ``platform_name`` exists primarily so CI can test Windows command building
-    while running on Linux.
+    while running on Linux. Windows batch launchers require a single command-line
+    string so Python does not escape the nested quotes as literal backslashes.
     """
 
     platform_name = platform_name or os.name
@@ -202,8 +203,9 @@ def build_launch_command(
     suffix = Path(executable).suffix.lower()
     if platform_name == "nt" and suffix in {".bat", ".cmd"}:
         shell = comspec or os.environ.get("COMSPEC", "cmd.exe")
-        quoted = subprocess.list2cmdline(args)
-        return [shell, "/d", "/s", "/c", f"call {quoted}"]
+        shell_command = subprocess.list2cmdline([shell])
+        batch_command = subprocess.list2cmdline(args)
+        return f'{shell_command} /d /s /c "{batch_command}"'
     return args
 
 
