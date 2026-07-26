@@ -4,34 +4,164 @@ on:
   workflow_dispatch:
     inputs:
       vivado_path:
-        description: Optional full path, bin directory, or Vivado version directory
+        description: Optional launcher or install directory; invalid paths fall back to auto-discovery
         required: false
         type: string
+  push:
+    branches:
+      - agent/windows-native-support
+    paths:
+      - .github/workflows/real-vivado-windows-smoke.yml
 
 jobs:
   smoke:
     runs-on: [self-hosted, Windows, X64, vivado]
     timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - run: python -m pip install --upgrade pip
+
       - run: python -m pip install .
-      - name: Run diagnostics against installed Vivado
+
+      - name: Discover installed Vivado
+        id: discover
         shell: pwsh
         env:
           REQUESTED_VIVADO_PATH: ${{ inputs.vivado_path }}
         run: |
-          if ($env:REQUESTED_VIVADO_PATH) {
-            $env:VIVADO_PATH = $env:REQUESTED_VIVADO_PATH
+          $ErrorActionPreference = "Stop"
+          $requested = [string]$env:REQUESTED_VIVADO_PATH
+          $candidateRecords = [System.Collections.Generic.List[object]]::new()
+
+          function Add-VivadoCandidate {
+            param(
+              [string]$Path,
+              [string]$Source
+            )
+
+            if (-not $Path) {
+              return
+            }
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+              return
+            }
+
+            $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+            if (-not ($candidateRecords.Path -contains $resolvedPath)) {
+              $candidateRecords.Add([pscustomobject]@{
+                path = $resolvedPath
+                source = $Source
+              })
+            }
           }
-          vivado-mcp-doctor --timeout 300 --json | Tee-Object -FilePath vivado-doctor.json
+
+          if ($requested) {
+            if (Test-Path -LiteralPath $requested -PathType Leaf) {
+              Add-VivadoCandidate -Path $requested -Source "workflow_input_file"
+            }
+            elseif (Test-Path -LiteralPath $requested -PathType Container) {
+              Add-VivadoCandidate -Path (Join-Path $requested "vivado.bat") -Source "workflow_input_directory"
+              Add-VivadoCandidate -Path (Join-Path $requested "bin\vivado.bat") -Source "workflow_input_directory"
+              Add-VivadoCandidate -Path (Join-Path $requested "Vivado\bin\vivado.bat") -Source "workflow_input_directory"
+            }
+            else {
+              Write-Warning "Requested Vivado path does not exist: $requested. Falling back to auto-discovery."
+            }
+          }
+
+          foreach ($commandName in @("vivado.bat", "vivado.cmd", "vivado.exe", "vivado")) {
+            $command = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($command) {
+              Add-VivadoCandidate -Path $command.Source -Source "PATH:$commandName"
+            }
+          }
+
+          $relativePatterns = @(
+            "Xilinx\Vivado\*\bin\vivado.bat",
+            "Xilinx\*\Vivado\bin\vivado.bat",
+            "AMD\Vivado\*\bin\vivado.bat",
+            "AMD\*\Vivado\bin\vivado.bat",
+            "Program Files\Xilinx\Vivado\*\bin\vivado.bat",
+            "Program Files\Xilinx\*\Vivado\bin\vivado.bat",
+            "Program Files\AMD\Vivado\*\bin\vivado.bat",
+            "Program Files\AMD\*\Vivado\bin\vivado.bat",
+            "tools\Xilinx\Vivado\*\bin\vivado.bat",
+            "tools\AMD\Vivado\*\bin\vivado.bat"
+          )
+
+          $fileSystemDrives = Get-PSDrive -PSProvider FileSystem |
+            Where-Object { $_.Root -match "^[A-Za-z]:\\$" }
+
+          foreach ($drive in $fileSystemDrives) {
+            foreach ($relativePattern in $relativePatterns) {
+              $pattern = Join-Path $drive.Root $relativePattern
+              foreach ($file in Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue) {
+                Add-VivadoCandidate -Path $file.FullName -Source "common_installation_layout"
+              }
+            }
+          }
+
+          $preferred = $null
+          if ($requested) {
+            $preferred = $candidateRecords |
+              Where-Object { $_.source -like "workflow_input*" } |
+              Select-Object -First 1
+          }
+          if (-not $preferred) {
+            $preferred = $candidateRecords |
+              Sort-Object -Property path -Descending |
+              Select-Object -First 1
+          }
+
+          $discovery = [ordered]@{
+            requested_vivado_path = $requested
+            resolved_vivado_path = if ($preferred) { $preferred.path } else { $null }
+            candidate_count = $candidateRecords.Count
+            candidates = @($candidateRecords)
+            runner_name = $env:RUNNER_NAME
+            machine_name = $env:COMPUTERNAME
+          }
+          $discovery |
+            ConvertTo-Json -Depth 5 |
+            Set-Content -Path vivado-discovery.json -Encoding utf8
+
+          Get-Content vivado-discovery.json
+
+          if (-not $preferred) {
+            throw "No Vivado launcher was found. Check vivado-discovery.json and provide the exact launcher or installation directory."
+          }
+
+          "vivado_path=$($preferred.path)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Selected Vivado launcher: $($preferred.path)"
+
+      - name: Run diagnostics against installed Vivado
+        shell: pwsh
+        env:
+          RESOLVED_VIVADO_PATH: ${{ steps.discover.outputs.vivado_path }}
+        run: |
+          & vivado-mcp-win-doctor `
+            --vivado-path $env:RESOLVED_VIVADO_PATH `
+            --timeout 300 `
+            --json 2>&1 |
+            Tee-Object -FilePath vivado-doctor.json
+
+          $doctorExitCode = $LASTEXITCODE
+          if ($doctorExitCode -ne 0) {
+            exit $doctorExitCode
+          }
+
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vivado-doctor-windows
-          path: vivado-doctor.json
+          path: |
+            vivado-discovery.json
+            vivado-doctor.json
           if-no-files-found: warn
