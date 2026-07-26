@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Tiny Vivado Tcl-shell simulator used by unit tests."""
+"""Tiny Vivado Tcl-shell simulator used by unit and package-install tests."""
 
 from __future__ import annotations
 
 import base64
+import os
 import re
 import sys
 import time
@@ -44,6 +45,14 @@ for line in sys.stdin:
         result = "READY"
     elif "__vivado_mcp_health" in command:
         result = "HEALTH_OK"
+    elif command == "version -short":
+        result = "2025.2"
+    elif command == "info patchlevel":
+        result = "8.6.13"
+    elif command == "pwd":
+        result = os.getcwd().replace("\\", "/")
+    elif command == "expr {6 * 7}":
+        result = "42"
     elif command.startswith("puts -nonewline "):
         payload = command[len("puts -nonewline "):].strip()
         if payload.startswith("{") and payload.endswith("}"):
