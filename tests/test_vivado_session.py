@@ -15,7 +15,9 @@ from vivado_mcp.vivado_session import (
     resolve_vivado_path,
 )
 
-FAKE_VIVADO = Path(__file__).with_name("fake_vivado.cmd" if os.name == "nt" else "fake_vivado.py")
+FAKE_VIVADO = Path(__file__).with_name(
+    "fake_vivado.cmd" if os.name == "nt" else "fake_vivado.py"
+)
 FAKE_VIVADO_PY = Path(__file__).with_name("fake_vivado.py")
 
 
@@ -62,7 +64,10 @@ def test_resolve_version_directory_from_environment(
     bin_dir = version_dir / "bin"
     bin_dir.mkdir(parents=True)
     launcher = bin_dir / ("vivado.bat" if os.name == "nt" else "vivado")
-    launcher.write_text("@echo off\r\n" if os.name == "nt" else "#!/bin/sh\n", encoding="utf-8")
+    launcher.write_text(
+        "@echo off\r\n" if os.name == "nt" else "#!/bin/sh\n",
+        encoding="utf-8",
+    )
     make_executable(launcher)
 
     monkeypatch.setenv("VIVADO_PATH", str(version_dir))
@@ -128,7 +133,10 @@ def test_windows_vivado_batch_path_with_spaces(tmp_path: Path) -> None:
     bin_dir.mkdir(parents=True)
     shutil.copy2(FAKE_VIVADO_PY, bin_dir / "fake_vivado.py")
     launcher = bin_dir / "vivado.bat"
-    launcher.write_text('@echo off\r\npython "%~dp0fake_vivado.py" %*\r\n', encoding="utf-8")
+    launcher.write_text(
+        '@echo off\r\npython "%~dp0fake_vivado.py" %*\r\n',
+        encoding="utf-8",
+    )
 
     session = VivadoSession(str(launcher), timeout=5)
     started = session.start()
