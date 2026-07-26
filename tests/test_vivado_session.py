@@ -6,7 +6,6 @@ import stat
 from pathlib import Path
 
 import pytest
-
 from vivado_mcp.doctor import run_diagnostics
 from vivado_mcp.vivado_session import (
     VivadoSession,
