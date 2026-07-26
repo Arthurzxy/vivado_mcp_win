@@ -1,2 +1,3 @@
-trigger=2026-07-26T09:48:00Z
+trigger=2026-07-26T09:53:00Z
 tested_ref=agent/windows-native-support
+discovery=environment-registry-recursive-full-drive
