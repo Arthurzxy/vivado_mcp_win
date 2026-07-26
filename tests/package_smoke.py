@@ -30,6 +30,7 @@ def main() -> int:
 
     wheel = find_wheel(sys.argv[1])
     repository = Path(__file__).resolve().parents[1]
+    diagnostic_path = repository / "package-smoke-result.json"
 
     with tempfile.TemporaryDirectory(prefix="vivado-mcp-package-smoke-") as temporary:
         root = Path(temporary)
@@ -83,6 +84,7 @@ def main() -> int:
 
         process_env = os.environ.copy()
         process_env["PATH"] = str(scripts) + os.pathsep + process_env.get("PATH", "")
+        process_env["VIVADO_MCP_OUTPUT_ENCODING"] = "utf-8"
         completed = subprocess.run(
             [
                 str(doctor),
@@ -100,12 +102,36 @@ def main() -> int:
             capture_output=True,
             timeout=60,
         )
+
+        diagnostic: dict[str, object] = {
+            "platform": os.name,
+            "wheel": str(wheel),
+            "doctor": str(doctor),
+            "launcher": str(launcher),
+            "returncode": completed.returncode,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+        }
+        try:
+            report = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            diagnostic["json_error"] = str(exc)
+            diagnostic_path.write_text(
+                json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(completed.stdout)
+            print(completed.stderr, file=sys.stderr)
+            return completed.returncode or 1
+
+        diagnostic["report"] = report
+        diagnostic_path.write_text(
+            json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
         if completed.returncode != 0:
             print(completed.stdout)
             print(completed.stderr, file=sys.stderr)
             return completed.returncode
-
-        report = json.loads(completed.stdout)
         if not report.get("success"):
             print(json.dumps(report, ensure_ascii=False, indent=2))
             return 1
