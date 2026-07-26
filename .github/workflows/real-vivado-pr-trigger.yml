@@ -25,13 +25,6 @@ jobs:
         with:
           ref: agent/windows-native-support
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install .
-
       - name: Discover installed Vivado
         id: discover
         shell: pwsh
@@ -179,6 +172,17 @@ jobs:
           "vivado_path=$($preferred.path)" |
             Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Selected Vivado launcher: $($preferred.path)"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install current branch without network dependency resolution
+        run: >-
+          python -m pip install .
+          --no-deps
+          --no-build-isolation
+          --disable-pip-version-check
 
       - name: Run diagnostics against installed Vivado
         shell: pwsh
