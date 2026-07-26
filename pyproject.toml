@@ -29,21 +29,24 @@ classifiers = [
 dependencies = [
     "mcp>=1.0.0",
     "psutil>=5.9.0",
+    "typing-extensions>=4.6",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "build>=1.2",
     "pytest>=8.0",
     "ruff>=0.6",
 ]
 
 [project.scripts]
 vivado-mcp = "vivado_mcp:main"
+vivado-mcp-doctor = "vivado_mcp.doctor:main"
 
 [project.urls]
-Homepage = "https://github.com/coreyhahn/vivado_mcp"
-Repository = "https://github.com/coreyhahn/vivado_mcp"
-Issues = "https://github.com/coreyhahn/vivado_mcp/issues"
+Homepage = "https://github.com/Arthurzxy/vivado_mcp_win"
+Repository = "https://github.com/Arthurzxy/vivado_mcp_win"
+Issues = "https://github.com/Arthurzxy/vivado_mcp_win/issues"
 
 [tool.setuptools]
 packages = ["vivado_mcp"]
