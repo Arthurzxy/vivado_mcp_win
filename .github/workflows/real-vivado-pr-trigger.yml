@@ -9,55 +9,9 @@ on:
 
 permissions:
   contents: read
-  issues: write
   pull-requests: read
 
 jobs:
-  acknowledge:
-    if: >-
-      github.actor == 'Arthurzxy' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.head_ref, 'chore/real-vivado-trigger-')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Report accepted trigger
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          run_url = (
-              f"{os.environ['GITHUB_SERVER_URL']}/"
-              f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
-              f"{os.environ['GITHUB_RUN_ID']}"
-          )
-          payload = {
-              "body": (
-                  "Restricted PR trigger accepted for the real Vivado smoke test.\n\n"
-                  f"- Run: {run_url}\n"
-                  "- Tested ref: `agent/windows-native-support`\n"
-                  "- Runner: `vivado-win-01`"
-              )
-          }
-          request = urllib.request.Request(
-              f"{os.environ['GITHUB_API_URL']}/repos/"
-              f"{os.environ['GITHUB_REPOSITORY']}/issues/1/comments",
-              data=json.dumps(payload).encode("utf-8"),
-              method="POST",
-              headers={
-                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-                  "Accept": "application/vnd.github+json",
-                  "X-GitHub-Api-Version": "2022-11-28",
-                  "Content-Type": "application/json",
-              },
-          )
-          with urllib.request.urlopen(request) as response:
-              print(response.status)
-          PY
-
   smoke:
     if: >-
       github.actor == 'Arthurzxy' &&
@@ -84,17 +38,39 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $records = [System.Collections.Generic.List[object]]::new()
+          $searchLog = [System.Collections.Generic.List[string]]::new()
 
           function Add-Candidate {
             param([string]$Path, [string]$Source)
             if (-not $Path) { return }
-            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
-            $resolved = (Resolve-Path -LiteralPath $Path).Path
+            $cleanPath = $Path.Trim().Trim('"')
+            if (-not (Test-Path -LiteralPath $cleanPath -PathType Leaf)) { return }
+            $resolved = (Resolve-Path -LiteralPath $cleanPath).Path
             if (-not ($records.path -contains $resolved)) {
               $records.Add([pscustomobject]@{
                 path = $resolved
                 source = $Source
               })
+              Write-Host "Found Vivado candidate: $resolved ($Source)"
+            }
+          }
+
+          function Add-InstallationRoot {
+            param([string]$Root, [string]$Source)
+            if (-not $Root) { return }
+            $cleanRoot = $Root.Trim().Trim('"')
+            if (-not (Test-Path -LiteralPath $cleanRoot -PathType Container)) { return }
+            Add-Candidate (Join-Path $cleanRoot "vivado.bat") $Source
+            Add-Candidate (Join-Path $cleanRoot "bin\vivado.bat") $Source
+            Add-Candidate (Join-Path $cleanRoot "Vivado\bin\vivado.bat") $Source
+          }
+
+          foreach ($variableName in @("VIVADO_PATH", "XILINX_VIVADO", "XILINX_VITIS")) {
+            $value = [Environment]::GetEnvironmentVariable($variableName)
+            if ($value) {
+              $searchLog.Add("Environment variable ${variableName} is set")
+              Add-Candidate $value "environment:$variableName"
+              Add-InstallationRoot $value "environment:$variableName"
             }
           }
 
@@ -102,6 +78,27 @@ jobs:
             $command = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($command) {
               Add-Candidate $command.Source "PATH:$name"
+            }
+          }
+
+          $uninstallRegistryPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+
+          foreach ($registryPath in $uninstallRegistryPaths) {
+            foreach ($entry in Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue) {
+              if ($entry.DisplayName -match "(?i)(Vivado|Xilinx.*Design|AMD.*Vivado)") {
+                $searchLog.Add("Registry entry: $($entry.DisplayName)")
+                Add-InstallationRoot $entry.InstallLocation "registry:$($entry.DisplayName)"
+                if ($entry.DisplayIcon) {
+                  $displayIcon = ([string]$entry.DisplayIcon).Split(',')[0].Trim('"')
+                  if (Test-Path -LiteralPath $displayIcon -PathType Leaf) {
+                    Add-InstallationRoot (Split-Path -Parent $displayIcon) "registry-icon:$($entry.DisplayName)"
+                  }
+                }
+              }
             }
           }
 
@@ -122,10 +119,36 @@ jobs:
             Where-Object { $_.Root -match "^[A-Za-z]:\\$" }
 
           foreach ($drive in $drives) {
+            $searchLog.Add("File-system drive: $($drive.Root)")
             foreach ($relativePattern in $relativePatterns) {
               $pattern = Join-Path $drive.Root $relativePattern
               foreach ($file in Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue) {
-                Add-Candidate $file.FullName "common_installation_layout"
+                Add-Candidate $file.FullName "common-layout:$relativePattern"
+              }
+            }
+          }
+
+          if ($records.Count -eq 0) {
+            foreach ($drive in $drives) {
+              $topLevelDirectories = Get-ChildItem -LiteralPath $drive.Root -Directory -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match "(?i)(xilinx|amd|vivado|fpga|eda|tool|soft|app|program)" }
+
+              foreach ($directory in $topLevelDirectories) {
+                $searchLog.Add("Recursive candidate root: $($directory.FullName)")
+                foreach ($file in Get-ChildItem -LiteralPath $directory.FullName -Filter vivado.bat -File -Recurse -Depth 8 -ErrorAction SilentlyContinue) {
+                  Add-Candidate $file.FullName "recursive-candidate-root"
+                }
+              }
+            }
+          }
+
+          if ($records.Count -eq 0) {
+            foreach ($drive in $drives) {
+              Write-Host "No candidate found yet; running full-drive search on $($drive.Root)"
+              $searchLog.Add("Full-drive where.exe search: $($drive.Root)")
+              $matches = & where.exe /R $drive.Root vivado.bat 2>$null
+              foreach ($match in @($matches)) {
+                Add-Candidate $match "full-drive-where"
               }
             }
           }
@@ -138,17 +161,19 @@ jobs:
             resolved_vivado_path = if ($preferred) { $preferred.path } else { $null }
             candidate_count = $records.Count
             candidates = @($records)
+            search_log = @($searchLog)
             runner_name = $env:RUNNER_NAME
+            machine_name = $env:COMPUTERNAME
             tested_ref = "agent/windows-native-support"
           }
           $discovery |
-            ConvertTo-Json -Depth 5 |
+            ConvertTo-Json -Depth 6 |
             Set-Content vivado-discovery.json -Encoding utf8
 
           Get-Content vivado-discovery.json
 
           if (-not $preferred) {
-            throw "No Vivado launcher was found in PATH or common installation layouts."
+            throw "No Vivado launcher was found after environment, registry, candidate-root, and full-drive searches."
           }
 
           "vivado_path=$($preferred.path)" |
@@ -180,53 +205,3 @@ jobs:
             vivado-discovery.json
             vivado-doctor.json
           if-no-files-found: warn
-
-      - name: Report result to PR 1
-        if: always()
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          $resolved = "not found"
-          $candidateCount = 0
-          $doctorSuccess = "not run"
-
-          if (Test-Path vivado-discovery.json) {
-            $discovery = Get-Content vivado-discovery.json -Raw | ConvertFrom-Json
-            if ($discovery.resolved_vivado_path) {
-              $resolved = $discovery.resolved_vivado_path
-            }
-            $candidateCount = $discovery.candidate_count
-          }
-
-          if (Test-Path vivado-doctor.json) {
-            try {
-              $doctor = Get-Content vivado-doctor.json -Raw | ConvertFrom-Json
-              $doctorSuccess = [string]$doctor.success
-            }
-            catch {
-              $doctorSuccess = "invalid JSON"
-            }
-          }
-
-          $body = @"
-          Real Vivado smoke run completed.
-
-          - Run: $runUrl
-          - Tested ref: agent/windows-native-support
-          - Resolved launcher: $resolved
-          - Candidates found: $candidateCount
-          - Doctor success: $doctorSuccess
-
-          Full diagnostics are in the workflow artifact.
-          "@
-
-          $headers = @{
-            Authorization = "Bearer $env:GITHUB_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-          $payload = @{ body = $body } | ConvertTo-Json
-          $uri = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/issues/1/comments"
-          Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $payload -ContentType "application/json"
