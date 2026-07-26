@@ -52,7 +52,11 @@ def run_diagnostics(vivado_path: str = "vivado", timeout: float = 300.0) -> dict
             ("tcl_version", "info patchlevel", None),
             ("working_directory", "pwd", None),
             ("tcl_expression", "expr {6 * 7}", "42"),
-            ("unicode_round_trip", "set __mcp_unicode_test {中文路径测试}", "中文路径测试"),
+            (
+                "unicode_round_trip",
+                "set __mcp_unicode_test {中文路径测试}",
+                "中文路径测试",
+            ),
         )
 
         all_commands_ok = True
@@ -79,7 +83,7 @@ def run_diagnostics(vivado_path: str = "vivado", timeout: float = 300.0) -> dict
         )
         report["success"] = all_commands_ok and healthy
         return report
-    except Exception as exc:  # CLI boundary: return diagnostics instead of a traceback.
+    except (FileNotFoundError, OSError, RuntimeError, TimeoutError, ValueError) as exc:
         report["steps"].append(
             {"name": "unexpected_error", "success": False, "output": str(exc)}
         )
@@ -95,6 +99,8 @@ def run_diagnostics(vivado_path: str = "vivado", timeout: float = 300.0) -> dict
                     "elapsed_ms": round(stopped.elapsed_ms, 3),
                 }
             )
+            if not stopped.success:
+                report["success"] = False
 
 
 def _print_human(report: dict[str, Any]) -> None:
