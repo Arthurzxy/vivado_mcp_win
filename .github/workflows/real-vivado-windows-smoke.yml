@@ -7,11 +7,8 @@ on:
         description: Optional launcher or install directory; invalid paths fall back to auto-discovery
         required: false
         type: string
-  push:
-    branches:
-      - master
-    paths:
-      - .github/workflows/real-vivado-windows-smoke.yml
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -19,6 +16,12 @@ permissions:
 
 jobs:
   smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 1 &&
+       github.event.comment.body == '/run-real-vivado-smoke' &&
+       github.actor == 'Arthurzxy')
     runs-on: [self-hosted, Windows, X64, vivado]
     timeout-minutes: 20
 
@@ -43,25 +46,16 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $requested = [string]$env:REQUESTED_VIVADO_PATH
-          $candidateRecords = [System.Collections.Generic.List[object]]::new()
+          $records = [System.Collections.Generic.List[object]]::new()
 
-          function Add-VivadoCandidate {
-            param(
-              [string]$Path,
-              [string]$Source
-            )
-
-            if (-not $Path) {
-              return
-            }
-            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-              return
-            }
-
-            $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
-            if (-not ($candidateRecords.Path -contains $resolvedPath)) {
-              $candidateRecords.Add([pscustomobject]@{
-                path = $resolvedPath
+          function Add-Candidate {
+            param([string]$Path, [string]$Source)
+            if (-not $Path) { return }
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+            $resolved = (Resolve-Path -LiteralPath $Path).Path
+            if (-not ($records.path -contains $resolved)) {
+              $records.Add([pscustomobject]@{
+                path = $resolved
                 source = $Source
               })
             }
@@ -69,22 +63,22 @@ jobs:
 
           if ($requested) {
             if (Test-Path -LiteralPath $requested -PathType Leaf) {
-              Add-VivadoCandidate -Path $requested -Source "workflow_input_file"
+              Add-Candidate $requested "workflow_input_file"
             }
             elseif (Test-Path -LiteralPath $requested -PathType Container) {
-              Add-VivadoCandidate -Path (Join-Path $requested "vivado.bat") -Source "workflow_input_directory"
-              Add-VivadoCandidate -Path (Join-Path $requested "bin\vivado.bat") -Source "workflow_input_directory"
-              Add-VivadoCandidate -Path (Join-Path $requested "Vivado\bin\vivado.bat") -Source "workflow_input_directory"
+              Add-Candidate (Join-Path $requested "vivado.bat") "workflow_input_directory"
+              Add-Candidate (Join-Path $requested "bin\vivado.bat") "workflow_input_directory"
+              Add-Candidate (Join-Path $requested "Vivado\bin\vivado.bat") "workflow_input_directory"
             }
             else {
               Write-Warning "Requested Vivado path does not exist: $requested. Falling back to auto-discovery."
             }
           }
 
-          foreach ($commandName in @("vivado.bat", "vivado.cmd", "vivado.exe", "vivado")) {
-            $command = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+          foreach ($name in @("vivado.bat", "vivado.cmd", "vivado.exe", "vivado")) {
+            $command = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($command) {
-              Add-VivadoCandidate -Path $command.Source -Source "PATH:$commandName"
+              Add-Candidate $command.Source "PATH:$name"
             }
           }
 
@@ -101,49 +95,50 @@ jobs:
             "tools\AMD\Vivado\*\bin\vivado.bat"
           )
 
-          $fileSystemDrives = Get-PSDrive -PSProvider FileSystem |
+          $drives = Get-PSDrive -PSProvider FileSystem |
             Where-Object { $_.Root -match "^[A-Za-z]:\\$" }
 
-          foreach ($drive in $fileSystemDrives) {
+          foreach ($drive in $drives) {
             foreach ($relativePattern in $relativePatterns) {
               $pattern = Join-Path $drive.Root $relativePattern
               foreach ($file in Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue) {
-                Add-VivadoCandidate -Path $file.FullName -Source "common_installation_layout"
+                Add-Candidate $file.FullName "common_installation_layout"
               }
             }
           }
 
           $preferred = $null
           if ($requested) {
-            $preferred = $candidateRecords |
+            $preferred = $records |
               Where-Object { $_.source -like "workflow_input*" } |
               Select-Object -First 1
           }
           if (-not $preferred) {
-            $preferred = $candidateRecords |
-              Sort-Object -Property path -Descending |
+            $preferred = $records |
+              Sort-Object path -Descending |
               Select-Object -First 1
           }
 
           $discovery = [ordered]@{
             requested_vivado_path = $requested
             resolved_vivado_path = if ($preferred) { $preferred.path } else { $null }
-            candidate_count = $candidateRecords.Count
-            candidates = @($candidateRecords)
+            candidate_count = $records.Count
+            candidates = @($records)
             runner_name = $env:RUNNER_NAME
             tested_ref = "agent/windows-native-support"
           }
           $discovery |
             ConvertTo-Json -Depth 5 |
-            Set-Content -Path vivado-discovery.json -Encoding utf8
+            Set-Content vivado-discovery.json -Encoding utf8
 
           Get-Content vivado-discovery.json
 
           if (-not $preferred) {
-            throw "No Vivado launcher was found. Check vivado-discovery.json and provide the exact launcher or installation directory."
+            throw "No Vivado launcher was found. Review vivado-discovery.json or provide the exact launcher path."
           }
 
-          "vivado_path=$($preferred.path)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "vivado_path=$($preferred.path)" |
+            Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Selected Vivado launcher: $($preferred.path)"
 
       - name: Run diagnostics against installed Vivado
@@ -155,7 +150,7 @@ jobs:
             --vivado-path $env:RESOLVED_VIVADO_PATH `
             --timeout 300 `
             --json 2>&1 |
-            Tee-Object -FilePath vivado-doctor.json
+            Tee-Object vivado-doctor.json
 
           $doctorExitCode = $LASTEXITCODE
           if ($doctorExitCode -ne 0) {
@@ -205,12 +200,12 @@ jobs:
           Real Vivado smoke run completed.
 
           - Run: $runUrl
-          - Tested ref: `agent/windows-native-support`
-          - Resolved launcher: `$resolved`
+          - Tested ref: agent/windows-native-support
+          - Resolved launcher: $resolved
           - Candidates found: $candidateCount
           - Doctor success: $doctorSuccess
 
-          The full `vivado-discovery.json` and `vivado-doctor.json` files are attached to the workflow run artifact `vivado-doctor-windows`.
+          Full discovery and doctor JSON files are in the vivado-doctor-windows artifact.
           "@
 
           $headers = @{
