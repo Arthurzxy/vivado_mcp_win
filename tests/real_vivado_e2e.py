@@ -32,7 +32,7 @@ package.__path__ = [str(ROOT)]
 package.__package__ = "vivado_mcp"
 sys.modules.setdefault("vivado_mcp", package)
 
-from vivado_mcp.vivado_session import CommandResult, VivadoSession  # noqa: E402
+from vivado_mcp.vivado_session import CommandResult, VivadoSession
 
 
 def _result_summary(result: CommandResult, *, output_limit: int = 4000) -> dict[str, Any]:
