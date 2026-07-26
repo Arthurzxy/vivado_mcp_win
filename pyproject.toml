@@ -42,6 +42,8 @@ dev = [
 [project.scripts]
 vivado-mcp = "vivado_mcp:main"
 vivado-mcp-doctor = "vivado_mcp.doctor:main"
+vivado-mcp-win = "vivado_mcp:main"
+vivado-mcp-win-doctor = "vivado_mcp.doctor:main"
 
 [project.urls]
 Homepage = "https://github.com/Arthurzxy/vivado_mcp_win"
