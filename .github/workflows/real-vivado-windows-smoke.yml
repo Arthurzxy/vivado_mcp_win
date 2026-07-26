@@ -15,6 +15,53 @@ permissions:
   issues: write
 
 jobs:
+  acknowledge:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 1 &&
+       github.event.comment.body == '/run-real-vivado-smoke' &&
+       github.actor == 'Arthurzxy')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge trigger
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+              f"{os.environ['GITHUB_RUN_ID']}"
+          )
+          body = {
+              "body": (
+                  "Real Vivado smoke trigger accepted.\n\n"
+                  f"- Run: {run_url}\n"
+                  "- Target: agent/windows-native-support\n"
+                  "- Self-hosted runner job may remain queued until vivado-win-01 is online."
+              )
+          }
+          request = urllib.request.Request(
+              f"{os.environ['GITHUB_API_URL']}/repos/"
+              f"{os.environ['GITHUB_REPOSITORY']}/issues/1/comments",
+              data=json.dumps(body).encode("utf-8"),
+              method="POST",
+              headers={
+                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+              },
+          )
+          with urllib.request.urlopen(request) as response:
+              print(response.status)
+          PY
+
   smoke:
     if: >-
       github.event_name == 'workflow_dispatch' ||
