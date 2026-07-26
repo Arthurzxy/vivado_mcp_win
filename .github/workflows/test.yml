@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   fix-windows-quoting:
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[apply-windows-quoting-fix]')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,9 +70,12 @@ jobs:
                   return f'{shell_command} /d /s /c "{batch_command}"'
               return args
           '''
-          if old_session not in session_text:
-              raise SystemExit("Expected build_launch_command block was not found")
-          session_path.write_text(session_text.replace(old_session, new_session), encoding="utf-8")
+          if old_session in session_text:
+              session_path.write_text(
+                  session_text.replace(old_session, new_session), encoding="utf-8"
+              )
+          elif new_session not in session_text:
+              raise SystemExit("Neither the original nor fixed launch block was found")
 
           test_path = Path("tests/test_vivado_session.py")
           test_text = test_path.read_text(encoding="utf-8")
@@ -93,9 +95,10 @@ jobs:
               assert '"C:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"' in command
               assert "-mode tcl" in command
           '''
-          if old_test not in test_text:
-              raise SystemExit("Expected Windows command assertion block was not found")
-          test_path.write_text(test_text.replace(old_test, new_test), encoding="utf-8")
+          if old_test in test_text:
+              test_path.write_text(test_text.replace(old_test, new_test), encoding="utf-8")
+          elif new_test not in test_text:
+              raise SystemExit("Neither the original nor fixed command test was found")
           '@ | python -
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
@@ -105,9 +108,14 @@ jobs:
       - name: Commit verified fix
         shell: pwsh
         run: |
+          git add vivado_session.py tests/test_vivado_session.py
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Windows quoting fix is already applied."
+            exit 0
+          }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add vivado_session.py tests/test_vivado_session.py
           git commit -m "Fix Windows batch launcher quoting"
           git push origin HEAD:agent/windows-native-support
 
