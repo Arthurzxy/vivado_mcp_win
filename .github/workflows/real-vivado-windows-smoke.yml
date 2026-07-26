@@ -13,6 +13,10 @@ on:
     paths:
       - .github/workflows/real-vivado-windows-smoke.yml
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   smoke:
     runs-on: [self-hosted, Windows, X64, vivado]
@@ -125,7 +129,6 @@ jobs:
             candidate_count = $candidateRecords.Count
             candidates = @($candidateRecords)
             runner_name = $env:RUNNER_NAME
-            machine_name = $env:COMPUTERNAME
           }
           $discovery |
             ConvertTo-Json -Depth 5 |
@@ -165,3 +168,52 @@ jobs:
             vivado-discovery.json
             vivado-doctor.json
           if-no-files-found: warn
+
+      - name: Report run to PR
+        if: always()
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $resolved = "not found"
+          $candidateCount = 0
+          $doctorSuccess = "not run"
+
+          if (Test-Path vivado-discovery.json) {
+            $discovery = Get-Content vivado-discovery.json -Raw | ConvertFrom-Json
+            if ($discovery.resolved_vivado_path) {
+              $resolved = $discovery.resolved_vivado_path
+            }
+            $candidateCount = $discovery.candidate_count
+          }
+
+          if (Test-Path vivado-doctor.json) {
+            try {
+              $doctor = Get-Content vivado-doctor.json -Raw | ConvertFrom-Json
+              $doctorSuccess = [string]$doctor.success
+            }
+            catch {
+              $doctorSuccess = "invalid JSON"
+            }
+          }
+
+          $body = @"
+          Real Vivado smoke run completed.
+
+          - Run: $runUrl
+          - Resolved launcher: `$resolved`
+          - Candidates found: $candidateCount
+          - Doctor success: $doctorSuccess
+
+          The full `vivado-discovery.json` and `vivado-doctor.json` files are attached to the workflow run artifact `vivado-doctor-windows`.
+          "@
+
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $payload = @{ body = $body } | ConvertTo-Json
+          $uri = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/issues/1/comments"
+          Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $payload -ContentType "application/json"
