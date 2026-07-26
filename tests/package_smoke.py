@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build-artifact smoke test executed outside the source tree."""
 
 from __future__ import annotations
