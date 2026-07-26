@@ -1,4 +1,5 @@
-trigger=2026-07-26T10:01:00Z
+trigger=2026-07-26T10:31:00Z
 tested_ref=agent/windows-native-support
-discovery=environment-registry-recursive-full-drive
-package_install=offline-no-deps-no-build-isolation
+selection=latest-real-vivado
+expected_vivado=D:\Software\Xilinx\2025.2.1\Vivado\bin\vivado.bat
+execution=source-bootstrap-no-pip
