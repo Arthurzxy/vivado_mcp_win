@@ -1,5 +1,6 @@
-trigger=2026-07-26T10:31:00Z
+trigger=2026-07-26T10:37:00Z
 tested_ref=agent/windows-native-support
 selection=latest-real-vivado
 expected_vivado=D:\Software\Xilinx\2025.2.1\Vivado\bin\vivado.bat
 execution=source-bootstrap-no-pip
+phase=transport-stress-timeout-temporary-synthesis
