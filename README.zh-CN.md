@@ -1,4 +1,4 @@
-# Vivado MCP
+# Vivado MCP Native
 
 [English](README.md) | **简体中文**
 

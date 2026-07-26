@@ -1,8 +1,10 @@
-# Vivado MCP
+# Vivado MCP Native
+
+**English** | [简体中文](README.zh-CN.md)
 
 A cross-platform Model Context Protocol (MCP) server for **AMD/Xilinx Vivado**. It lets MCP-compatible AI clients start and manage Vivado, open projects, run synthesis and implementation, inspect timing and utilization, control simulation, and execute Tcl commands.
 
-This fork uses a persistent `subprocess` Tcl session that works natively on Windows and Linux. It does not depend on the Unix-only `pexpect` transport.
+This project uses a persistent `subprocess` Tcl session that works natively on Windows and Linux. It does not depend on the Unix-only `pexpect` transport.
 
 > [!IMPORTANT]
 > Vivado is not included. Device support, licensed features, and available FPGA families are determined by the Vivado installation on the host machine.
@@ -39,7 +41,7 @@ This fork uses a persistent `subprocess` Tcl session that works natively on Wind
 ```powershell
 py -m pip install --user --upgrade pipx
 py -m pipx ensurepath
-py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
 ```
 
 Restart the terminal after `ensurepath` when necessary.
@@ -49,7 +51,7 @@ Restart the terminal after `ensurepath` when necessary.
 ```bash
 python3 -m pip install --user --upgrade pipx
 python3 -m pipx ensurepath
-python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
 ```
 
 Installed commands:
@@ -64,7 +66,7 @@ Installed commands:
 $venv = "$env:LOCALAPPDATA\vivado-mcp-win"
 py -3.11 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --upgrade pip
-& "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+& "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
 ```
 
 ## Select the Vivado installation
