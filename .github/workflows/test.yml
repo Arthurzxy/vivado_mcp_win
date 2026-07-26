@@ -4,7 +4,113 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
+  fix-windows-quoting:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[apply-windows-quoting-fix]')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/windows-native-support
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply quoting fix
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          session_path = Path("vivado_session.py")
+          session_text = session_path.read_text(encoding="utf-8")
+          old_session = '''def build_launch_command(
+              executable: str,
+              *,
+              platform_name: str | None = None,
+              comspec: str | None = None,
+          ) -> list[str]:
+              """Build the platform-specific subprocess command.
+
+              ``platform_name`` exists primarily so CI can test Windows command building
+              while running on Linux.
+              """
+
+              platform_name = platform_name or os.name
+              args = [executable, "-mode", "tcl", "-nojournal", "-nolog"]
+              suffix = Path(executable).suffix.lower()
+              if platform_name == "nt" and suffix in {".bat", ".cmd"}:
+                  shell = comspec or os.environ.get("COMSPEC", "cmd.exe")
+                  quoted = subprocess.list2cmdline(args)
+                  return [shell, "/d", "/s", "/c", f"call {quoted}"]
+              return args
+          '''
+          new_session = '''def build_launch_command(
+              executable: str,
+              *,
+              platform_name: str | None = None,
+              comspec: str | None = None,
+          ) -> str | list[str]:
+              """Build the platform-specific subprocess command.
+
+              ``platform_name`` exists primarily so CI can test Windows command building
+              while running on Linux. Windows batch launchers require a single command-line
+              string so Python does not escape the nested quotes as literal backslashes.
+              """
+
+              platform_name = platform_name or os.name
+              args = [executable, "-mode", "tcl", "-nojournal", "-nolog"]
+              suffix = Path(executable).suffix.lower()
+              if platform_name == "nt" and suffix in {".bat", ".cmd"}:
+                  shell = comspec or os.environ.get("COMSPEC", "cmd.exe")
+                  shell_command = subprocess.list2cmdline([shell])
+                  batch_command = subprocess.list2cmdline(args)
+                  return f'{shell_command} /d /s /c "{batch_command}"'
+              return args
+          '''
+          if old_session not in session_text:
+              raise SystemExit("Expected build_launch_command block was not found")
+          session_path.write_text(session_text.replace(old_session, new_session), encoding="utf-8")
+
+          test_path = Path("tests/test_vivado_session.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          old_test = '''    assert command[:4] == [
+                  r"C:\\Windows\\System32\\cmd.exe",
+                  "/d",
+                  "/s",
+                  "/c",
+              ]
+              assert "call" in command[4]
+              assert "vivado.bat" in command[4]
+              assert "-mode tcl" in command[4]
+          '''
+          new_test = '''    assert isinstance(command, str)
+              assert command.startswith(r"C:\\Windows\\System32\\cmd.exe /d /s /c ")
+              assert command.endswith('"')
+              assert '"C:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"' in command
+              assert "-mode tcl" in command
+          '''
+          if old_test not in test_text:
+              raise SystemExit("Expected Windows command assertion block was not found")
+          test_path.write_text(test_text.replace(old_test, new_test), encoding="utf-8")
+          '@ | python -
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m compileall -q .
+      - run: python -m pytest -q
+      - run: python -m ruff check vivado_session.py doctor.py tests
+      - name: Commit verified fix
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vivado_session.py tests/test_vivado_session.py
+          git commit -m "Fix Windows batch launcher quoting"
+          git push origin HEAD:agent/windows-native-support
+
   pytest:
     strategy:
       fail-fast: false
