@@ -33,18 +33,59 @@ jobs:
           $records = [System.Collections.Generic.List[object]]::new()
           $searchLog = [System.Collections.Generic.List[string]]::new()
 
+          function Get-VersionScore {
+            param([string]$Path)
+            $matches = [regex]::Matches($Path, '(?<!\d)(20\d{2})\.(\d+)(?:\.(\d+))?')
+            if ($matches.Count -eq 0) { return [long]0 }
+            $match = $matches[$matches.Count - 1]
+            $year = [long]$match.Groups[1].Value
+            $minor = [long]$match.Groups[2].Value
+            $patch = if ($match.Groups[3].Success) { [long]$match.Groups[3].Value } else { [long]0 }
+            return ($year * 10000L) + ($minor * 100L) + $patch
+          }
+
+          function Get-CandidateScore {
+            param([string]$Path, [string]$Source)
+            if ($Path -match '(?i)\\MATLAB\\|hdlverifier|dpigenerator|\\makefiles\\') {
+              return [long]-1
+            }
+
+            $score = [long]0
+            if ($Path -match '(?i)\\Vivado\\bin\\vivado\.(bat|cmd|exe)$') {
+              $score += 1000000000L
+            }
+            if ($Path -match '(?i)\\(Xilinx|AMD)\\') {
+              $score += 100000000L
+            }
+            $score += (Get-VersionScore $Path) * 100L
+
+            if ($Source -like 'environment:*') { $score += 40L }
+            elseif ($Source -like 'PATH:*') { $score += 30L }
+            elseif ($Source -like 'registry:*') { $score += 20L }
+            elseif ($Source -like 'common-layout:*') { $score += 10L }
+
+            return $score
+          }
+
           function Add-Candidate {
             param([string]$Path, [string]$Source)
             if (-not $Path) { return }
             $cleanPath = $Path.Trim().Trim('"')
             if (-not (Test-Path -LiteralPath $cleanPath -PathType Leaf)) { return }
             $resolved = (Resolve-Path -LiteralPath $cleanPath).Path
+            $score = Get-CandidateScore $resolved $Source
+            if ($score -lt 0) {
+              $searchLog.Add("Rejected non-launcher wrapper: $resolved")
+              return
+            }
             if (-not ($records.path -contains $resolved)) {
               $records.Add([pscustomobject]@{
                 path = $resolved
                 source = $Source
+                version_score = Get-VersionScore $resolved
+                score = $score
               })
-              Write-Host "Found Vivado candidate: $resolved ($Source)"
+              Write-Host "Found Vivado candidate: $resolved ($Source, score=$score)"
             }
           }
 
@@ -85,12 +126,6 @@ jobs:
               if ($entry.DisplayName -match "(?i)(Vivado|Xilinx.*Design|AMD.*Vivado)") {
                 $searchLog.Add("Registry entry: $($entry.DisplayName)")
                 Add-InstallationRoot $entry.InstallLocation "registry:$($entry.DisplayName)"
-                if ($entry.DisplayIcon) {
-                  $displayIcon = ([string]$entry.DisplayIcon).Split(',')[0].Trim('"')
-                  if (Test-Path -LiteralPath $displayIcon -PathType Leaf) {
-                    Add-InstallationRoot (Split-Path -Parent $displayIcon) "registry-icon:$($entry.DisplayName)"
-                  }
-                }
               }
             }
           }
@@ -137,7 +172,6 @@ jobs:
 
           if ($records.Count -eq 0) {
             foreach ($drive in $drives) {
-              Write-Host "No candidate found yet; running full-drive search on $($drive.Root)"
               $searchLog.Add("Full-drive where.exe search: $($drive.Root)")
               $matches = & where.exe /R $drive.Root vivado.bat 2>$null
               foreach ($match in @($matches)) {
@@ -147,11 +181,12 @@ jobs:
           }
 
           $preferred = $records |
-            Sort-Object path -Descending |
+            Sort-Object -Property @{Expression='score'; Descending=$true}, @{Expression='path'; Descending=$true} |
             Select-Object -First 1
 
           $discovery = [ordered]@{
             resolved_vivado_path = if ($preferred) { $preferred.path } else { $null }
+            selected_score = if ($preferred) { $preferred.score } else { $null }
             candidate_count = $records.Count
             candidates = @($records)
             search_log = @($searchLog)
@@ -166,7 +201,7 @@ jobs:
           Get-Content vivado-discovery.json
 
           if (-not $preferred) {
-            throw "No Vivado launcher was found after environment, registry, candidate-root, and full-drive searches."
+            throw "No real Vivado launcher was found."
           }
 
           "vivado_path=$($preferred.path)" |
@@ -177,24 +212,46 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install current branch without network dependency resolution
-        run: >-
-          python -m pip install .
-          --no-deps
-          --no-build-isolation
-          --disable-pip-version-check
-
-      - name: Run diagnostics against installed Vivado
+      - name: Run diagnostics directly from checked-out source
         shell: pwsh
         env:
           RESOLVED_VIVADO_PATH: ${{ steps.discover.outputs.vivado_path }}
         run: |
-          & vivado-mcp-win-doctor `
-            --vivado-path $env:RESOLVED_VIVADO_PATH `
-            --timeout 300 `
-            --json 2>&1 |
-            Tee-Object vivado-doctor.json
+          $bootstrap = Join-Path $env:RUNNER_TEMP "run_vivado_doctor_from_source.py"
+          @'
+          import os
+          import pathlib
+          import runpy
+          import sys
+          import types
+          import typing
 
+          root = pathlib.Path.cwd()
+
+          try:
+              import typing_extensions  # noqa: F401
+          except ImportError:
+              compatibility = types.ModuleType("typing_extensions")
+              compatibility.Self = typing.Self
+              sys.modules["typing_extensions"] = compatibility
+
+          package = types.ModuleType("vivado_mcp")
+          package.__path__ = [str(root)]
+          package.__package__ = "vivado_mcp"
+          sys.modules["vivado_mcp"] = package
+
+          sys.argv = [
+              "vivado-mcp-win-doctor",
+              "--vivado-path",
+              os.environ["RESOLVED_VIVADO_PATH"],
+              "--timeout",
+              "300",
+              "--json",
+          ]
+          runpy.run_module("vivado_mcp.doctor", run_name="__main__")
+          '@ | Set-Content -Path $bootstrap -Encoding utf8
+
+          & python $bootstrap 2>&1 | Tee-Object vivado-doctor.json
           $doctorExitCode = $LASTEXITCODE
           if ($doctorExitCode -ne 0) {
             exit $doctorExitCode
