@@ -47,6 +47,7 @@ License: MIT
 import json
 import os
 import re
+import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -66,7 +67,7 @@ FEATURE_REQUESTS_FILE = Path(__file__).parent / "data" / "feature_requests.json"
 
 # Report management configuration
 # Reports are written to temp files when they exceed inline size limits
-REPORTS_DIR = Path("/tmp/vivado_mcp")
+REPORTS_DIR = Path(tempfile.gettempdir()) / "vivado_mcp"
 
 # Maximum characters to return inline in a response
 # Larger reports should use generate_full_report + read_report_section
@@ -1220,7 +1221,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "output_file": {
                         "type": "string",
-                        "description": "Optional custom output path. Default: /tmp/vivado_mcp/<type>_<id>.txt"
+                        "description": "Optional custom output path. Default: the platform temporary directory/vivado_mcp/<type>_<id>.txt"
                     }
                 },
                 "required": ["report_type"]

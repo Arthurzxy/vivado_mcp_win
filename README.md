@@ -1,265 +1,213 @@
-# Vivado MCP Server
+# Vivado MCP
 
-A Model Context Protocol (MCP) server that enables AI assistants like Claude to directly interact with AMD/Xilinx Vivado FPGA development tools.
+A cross-platform Model Context Protocol (MCP) server for **AMD/Xilinx Vivado**. It lets MCP-compatible AI clients start and manage Vivado, open projects, run synthesis and implementation, inspect timing and utilization, control simulation, and execute Tcl commands.
 
-## Features
+This fork uses a persistent `subprocess` Tcl session that works natively on Windows and Linux. It does not depend on the Unix-only `pexpect` transport.
 
-- **Session Management**: Start/stop persistent Vivado TCL sessions (avoids 30s startup per command)
-- **Project Management**: Open/close Vivado projects (.xpr files)
-- **Design Flow**: Run synthesis, implementation, and bitstream generation
-- **Reports & Analysis**: Get timing summaries, utilization reports, and design analysis
-- **Design Queries**: Explore hierarchy, ports, nets, and cells
-- **Simulation**: Control Vivado's integrated simulator (xsim)
-- **Raw TCL**: Execute arbitrary Vivado TCL commands for advanced operations
+> [!IMPORTANT]
+> Vivado is not included. Device support, licensed features, and available FPGA families are determined by the Vivado installation on the host machine.
+
+> [!WARNING]
+> The name `vivado-mcp` on PyPI belongs to a different project. Install this repository directly from GitHub rather than using a bare `pip install vivado-mcp`.
+
+## Highlights
+
+- Native launch of Windows `vivado.bat` and `vivado.cmd` files.
+- Direct Linux executable launch without an intermediate shell.
+- One persistent Vivado Tcl process reused across MCP calls.
+- UUID-framed command protocol that separates stdout, Tcl return values, return codes, and error stacks.
+- UTF-8 hex transport for quotes, braces, backslashes, multiline Tcl, Unicode, and Windows paths.
+- Full process-tree cleanup after command timeouts.
+- Vivado discovery through `VIVADO_PATH`, PATH, and common installation directories.
+- A `vivado-mcp-win-doctor` command for checking the local Python-to-Vivado connection.
 
 ## Requirements
 
-- Python 3.10+
-- AMD/Xilinx Vivado installed (tested with 2023.2+)
-- Vivado must be in your PATH, or specify the full path when starting a session
+| Component | Requirement |
+|---|---|
+| Operating system | Windows 10/11 or Linux |
+| Python | 3.10–3.12 |
+| Vivado | Local AMD/Xilinx Vivado installation |
+| License | Appropriate for the operations and FPGA devices you use |
 
 ## Installation
 
-### From GitHub
+### pipx from GitHub — recommended
+
+#### Windows PowerShell
+
+```powershell
+py -m pip install --user --upgrade pipx
+py -m pipx ensurepath
+py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+```
+
+Restart the terminal after `ensurepath` when necessary.
+
+#### Linux
 
 ```bash
-git clone https://github.com/coreyhahn/vivado_mcp.git
-cd vivado_mcp
-pip install -e .
+python3 -m pip install --user --upgrade pipx
+python3 -m pipx ensurepath
+python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
 ```
 
-### Configure Claude Code
+Installed commands:
 
-Add to your Claude Code MCP configuration (`~/.claude/claude_desktop_config.json` or project-level `.mcp.json`):
+- `vivado-mcp-win` — start the MCP server;
+- `vivado-mcp-win-doctor` — check the local Vivado connection;
+- `vivado-mcp` and `vivado-mcp-doctor` — compatibility aliases.
+
+### Dedicated virtual environment
+
+```powershell
+$venv = "$env:LOCALAPPDATA\vivado-mcp-win"
+py -3.11 -m venv $venv
+& "$venv\Scripts\python.exe" -m pip install --upgrade pip
+& "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+```
+
+## Select the Vivado installation
+
+`VIVADO_PATH` and the `start_session` tool's `vivado_path` argument may point to:
+
+- the complete `vivado.bat`, `vivado.cmd`, `vivado.exe`, or Linux `vivado` launcher;
+- the Vivado `bin` directory;
+- the Vivado version directory.
+
+Example:
+
+```powershell
+$env:VIVADO_PATH = "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
+```
+
+Without an explicit path, the server checks PATH and common Windows locations such as:
+
+```text
+C:\Xilinx\Vivado\*\bin\vivado.bat
+C:\AMD\Vivado\*\bin\vivado.bat
+C:\Program Files\AMD\Vivado\*\bin\vivado.bat
+```
+
+## Check the Vivado connection
+
+```powershell
+vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
+```
+
+The path may also be a Vivado `bin` directory or version directory. Machine-readable output is available with `--json`:
+
+```powershell
+vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
+```
+
+The diagnostic command resolves the launcher, starts a persistent Tcl session, queries Vivado and Tcl versions, checks Tcl command transport and Unicode handling, verifies session health, and closes Vivado cleanly. It does not open or modify a user project.
+
+## Configure an MCP client
+
+Find the installed executable:
+
+```powershell
+(Get-Command vivado-mcp-win).Source
+```
+
+Example configuration for a pipx installation:
 
 ```json
 {
   "mcpServers": {
     "vivado": {
-      "command": "vivado-mcp"
+      "command": "C:\\Users\\you\\.local\\bin\\vivado-mcp-win.exe",
+      "env": {
+        "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
+      }
     }
   }
 }
 ```
 
-Or if you want to specify the Python interpreter:
+Example configuration for a virtual environment:
 
 ```json
 {
   "mcpServers": {
     "vivado": {
-      "command": "python",
-      "args": ["-m", "vivado_mcp"]
+      "command": "C:\\Users\\you\\AppData\\Local\\vivado-mcp-win\\Scripts\\python.exe",
+      "args": ["-m", "vivado_mcp"],
+      "env": {
+        "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
+      }
     }
   }
 }
 ```
 
-## Usage
+Using an absolute executable or Python path avoids depending on the MCP client's PATH environment.
 
-Once configured, Claude can interact with Vivado through natural language. Example workflow:
+## Capabilities
 
-1. **Start Vivado session**: "Start a Vivado session"
-2. **Open project**: "Open my project at /path/to/project.xpr"
-3. **Run synthesis**: "Synthesize the design"
-4. **Check timing**: "What's the timing summary? Is timing met?"
-5. **Check utilization**: "Show me the resource utilization"
-6. **Close session**: "Stop the Vivado session"
-
-## Available Tools
-
-### Session Management
-- `start_session` - Start a persistent Vivado TCL session
-- `stop_session` - Stop the Vivado session
-- `session_status` - Get session statistics
-
-### Project Management
-- `open_project` - Open a Vivado project (.xpr)
-- `close_project` - Close the current project
-- `get_project_info` - Get project information (part, directory, etc.)
-
-### Design Flow
-- `run_synthesis` - Run synthesis
-- `run_implementation` - Run place and route
-- `generate_bitstream` - Generate bitstream
-
-### Reports & Analysis
-- `get_timing_summary` - Get timing summary (WNS, TNS, WHS, THS)
-- `get_timing_paths` - Get detailed timing paths for failing/critical paths
-- `get_utilization` - Get resource utilization (LUTs, FFs, BRAMs, DSPs)
-- `get_clocks` - Get clock information
-- `get_messages` - Get synthesis/implementation messages
-
-### Design Queries
-- `get_design_hierarchy` - Get module/instance hierarchy
-- `get_ports` - Get top-level ports
-- `get_nets` - Search for nets
-- `get_cells` - Search for cells/instances
-
-### Simulation
-- `launch_simulation` - Launch behavioral/post-synth/post-impl simulation
-- `run_simulation` - Run simulation for specified time
-- `restart_simulation` - Restart from time 0
-- `close_simulation` - Close the simulator
-- `get_simulation_time` - Get current simulation time
-- `get_signal_value` - Get a signal's current value
-- `get_signal_values` - Get multiple signal values by pattern
-- `add_signals_to_wave` - Add signals to waveform viewer
-- `set_simulation_top` - Set the testbench module
-- `get_simulation_objects` - List signals in a scope
-- `get_scopes` - List hierarchy scopes
-- `step_simulation` - Step simulation
-- `add_breakpoint` - Add signal breakpoint
-- `remove_breakpoints` - Remove all breakpoints
-
-### Advanced
-- `run_tcl` - Execute raw TCL commands
-- `generate_full_report` - Generate full reports to file
-- `read_report_section` - Read portions of large reports
-- `request_feature` - Request new features
-- `list_feature_requests` - List submitted requests
+| Category | Representative tools | Purpose |
+|---|---|---|
+| Session management | `start_session`, `stop_session`, `session_status`, `get_host_status` | Start or stop Vivado and inspect session or host state |
+| Project management | `open_project`, `close_project`, `get_project_info` | Open `.xpr` projects and read project information |
+| Design flow | `run_synthesis`, `run_implementation`, `generate_bitstream` | Run synthesis, place-and-route, and bitstream generation |
+| Reports | `get_timing_summary`, `get_timing_paths`, `get_utilization`, `get_clocks`, `get_messages` | Read timing, resource, clock, and message reports |
+| Design queries | `get_design_hierarchy`, `get_ports`, `get_nets`, `get_cells` | Inspect hierarchy, ports, nets, and cells |
+| Simulation | `launch_simulation`, `run_simulation`, `restart_simulation`, `get_signal_value` | Control xsim and inspect signals |
+| Advanced | `run_tcl`, `generate_full_report`, `read_report_section` | Execute Tcl and read large reports |
 
 ## Architecture
 
-```
-┌─────────────────┐     MCP Protocol      ┌─────────────────┐
-│   Claude Code   │◄────(JSON-RPC)────────►│  Vivado MCP     │
-│   (AI Client)   │     over stdio        │    Server       │
-└─────────────────┘                       └────────┬────────┘
-                                                   │
-                                                   │ pexpect
-                                                   │ (TCL commands)
-                                                   ▼
-                                          ┌─────────────────┐
-                                          │ Vivado Process  │
-                                          │  (TCL mode)     │
-                                          └─────────────────┘
+```text
+MCP-compatible client
+        │ MCP / stdio
+        ▼
+Vivado MCP server
+        │ persistent subprocess Tcl session
+        ▼
+AMD/Xilinx Vivado -mode tcl
 ```
 
-The server maintains a persistent Vivado process in TCL mode. Commands are sent via pexpect and output is captured by waiting for the Vivado prompt. This avoids the ~30 second startup overhead that would occur if Vivado were launched for each command.
+Each command is transported as UTF-8 hex and wrapped with unique markers. The server extracts stdout, the Tcl result, return code, and error stack without relying on the localized `Vivado%` prompt.
 
-## Recreating This MCP Server with Claude
+## Troubleshooting
 
-This MCP server was created entirely through conversation with Claude. Here's how you can create similar MCP servers:
+### Vivado does not start
 
-### 1. Start with a Clear Goal
+Verify the launcher directly:
 
-Tell Claude what you want to build:
-> "I want to create an MCP server that lets you control Vivado FPGA tools. You should be able to start Vivado, open projects, run synthesis, check timing, etc."
-
-### 2. Describe the Architecture
-
-Explain the key technical challenges:
-> "Vivado takes 30 seconds to start, so we need a persistent session. Vivado has a TCL interface we can use. We need to parse Vivado's text output into structured data."
-
-### 3. Iterate on Tools
-
-Start with basic tools and add more:
-1. Session management (start/stop)
-2. Project management
-3. Design flow commands
-4. Reports and queries
-5. Simulation control
-
-### 4. Key Design Patterns Used
-
-**Singleton Session**: Only one Vivado process runs at a time
-```python
-_session: Optional[VivadoSession] = None
-
-def get_session() -> VivadoSession:
-    global _session
-    if _session is None:
-        _session = VivadoSession()
-    return _session
+```powershell
+& "D:\Xilinx\Vivado\2025.2\bin\vivado.bat" -mode tcl
 ```
 
-**pexpect for Process Management**: Keeps Vivado alive between commands
-```python
-self.child = pexpect.spawn(
-    f'{self.vivado_path} -mode tcl -nojournal -nolog',
-    encoding='utf-8',
-    timeout=self.timeout
-)
-self.child.expect('Vivado%', timeout=10)  # Wait for prompt
+Then run `vivado-mcp-win-doctor` and check the path, installation, permissions, environment, and license configuration.
+
+### Chinese output is corrupted
+
+Override the Windows output decoder when necessary:
+
+```powershell
+$env:VIVADO_MCP_OUTPUT_ENCODING = "gbk"
 ```
 
-**Output Parsing**: Convert text reports to structured JSON
-```python
-def parse_timing_summary(output: str) -> dict:
-    wns_match = re.search(r"WNS\(ns\)\s*:\s*([-\d.]+)", output)
-    if wns_match:
-        result["wns"] = float(wns_match.group(1))
-```
+Use `utf-8`, `gbk`, or the encoding that matches the Vivado Tcl console.
 
-**Response Truncation**: Handle large outputs gracefully
-```python
-def truncate_response(content: str, max_chars: int) -> dict:
-    if len(content) > max_chars:
-        return {"content": content[:max_chars], "truncated": True}
-```
+### A command times out
 
-### 5. MCP Server Structure
+The server terminates the Vivado process tree after a timeout to avoid a desynchronized session. Start a new session and use a larger timeout for long synthesis or implementation runs.
 
-Every MCP server needs:
+More Windows guidance is available in [`WINDOWS_INSTALL.md`](WINDOWS_INSTALL.md).
 
-```python
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+## Security
 
-server = Server("your-server-name")
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [Tool(name="...", description="...", inputSchema={...})]
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    # Handle tool calls
-    return [TextContent(type="text", text=json.dumps(result))]
-
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream,
-                        server.create_initialization_options())
-```
-
-### 6. Prompt for Creating Your Own MCP Server
-
-Use this prompt template with Claude:
-
-```
-I want to create an MCP server for [YOUR TOOL].
-
-Background:
-- [Tool] is a [description] that [what it does]
-- It has a [CLI/API/etc] interface that accepts [commands/requests]
-- Key operations I want to support: [list operations]
-
-Technical considerations:
-- [Startup time, persistent state, output formats, etc.]
-
-Please help me create an MCP server with:
-1. Session/connection management
-2. Core operations as tools
-3. Proper error handling
-4. Structured JSON responses
-5. Comprehensive code comments
-
-Start with the basic structure and we'll iterate from there.
-```
-
-## Contributing
-
-Contributions welcome! Please feel free to submit issues and pull requests.
+`run_tcl` can execute arbitrary Tcl with the current user's permissions, including file operations and external process launches. Expose this server only to trusted MCP clients and review high-impact commands and paths.
 
 ## License
 
-MIT License - see LICENSE file for details.
+This project is available under the [MIT License](LICENSE).
 
 ## Acknowledgments
 
-- Created with [Claude](https://claude.ai) (Anthropic)
-- Uses the [Model Context Protocol](https://modelcontextprotocol.io) specification
-- Integrates with [AMD/Xilinx Vivado](https://www.xilinx.com/products/design-tools/vivado.html)
+- Original project created by Corey Hahn.
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io/).
+- Integrates with [AMD/Xilinx Vivado](https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vivado.html).
