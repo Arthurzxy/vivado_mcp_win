@@ -1,0 +1,80 @@
+name: windows-cmd-quoting-lab
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quote-lab:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Exercise cmd.exe quoting variants
+        shell: pwsh
+        run: |
+          @'
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          root = Path(tempfile.mkdtemp(prefix="AMD Tools (Quote Lab) "))
+          batch = root / "vivado.bat"
+          batch.write_text("@echo off\r\necho BATCH_OK %*\r\n", encoding="utf-8")
+          shell = os.environ.get("COMSPEC", "cmd.exe")
+          args = [str(batch), "-mode", "tcl", "-nojournal", "-nolog"]
+          shell_q = subprocess.list2cmdline([shell])
+          batch_q = subprocess.list2cmdline(args)
+
+          variants = {
+              "current_list_call": [shell, "/d", "/s", "/c", f"call {batch_q}"],
+              "string_outer": f'{shell_q} /d /s /c "{batch_q}"',
+              "string_outer_call": f'{shell_q} /d /s /c "call {batch_q}"',
+              "list_no_s_call": [shell, "/d", "/c", f"call {batch_q}"],
+              "list_no_s_no_call": [shell, "/d", "/c", batch_q],
+              "direct_list": args,
+              "direct_string": batch_q,
+          }
+
+          results = {}
+          for name, command in variants.items():
+              try:
+                  completed = subprocess.run(
+                      command,
+                      stdin=subprocess.DEVNULL,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.STDOUT,
+                      text=True,
+                      encoding="utf-8",
+                      errors="replace",
+                      timeout=15,
+                      shell=False,
+                  )
+                  results[name] = {
+                      "command": command,
+                      "returncode": completed.returncode,
+                      "output": completed.stdout,
+                      "success": completed.returncode == 0 and "BATCH_OK" in completed.stdout,
+                  }
+              except Exception as exc:
+                  results[name] = {
+                      "command": command,
+                      "exception": repr(exc),
+                      "success": False,
+                  }
+
+          Path("windows-cmd-quoting-results.json").write_text(
+              json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print(json.dumps(results, ensure_ascii=False, indent=2))
+          if not any(item["success"] for item in results.values()):
+              raise SystemExit("No quoting variant succeeded")
+          '@ | python -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-cmd-quoting-results
+          path: windows-cmd-quoting-results.json
