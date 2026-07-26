@@ -263,3 +263,25 @@ MIT License - see LICENSE file for details.
 - Created with [Claude](https://claude.ai) (Anthropic)
 - Uses the [Model Context Protocol](https://modelcontextprotocol.io) specification
 - Integrates with [AMD/Xilinx Vivado](https://www.xilinx.com/products/design-tools/vivado.html)
+
+## Windows support
+
+This fork supports native Windows Vivado installations. Configure
+`VIVADO_PATH` to the installed `vivado.bat`, for example:
+
+```json
+{
+  "mcpServers": {
+    "vivado": {
+      "command": "C:\\path\\to\\vivado_mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "vivado_mcp"],
+      "env": {
+        "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
+      }
+    }
+  }
+}
+```
+
+See [`WINDOWS_INSTALL.md`](WINDOWS_INSTALL.md) for installation, testing, and
+troubleshooting details.
