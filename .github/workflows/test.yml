@@ -103,7 +103,14 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m compileall -q .
-      - run: python -m pytest -q
+      - name: Run fixed-tree pytest
+        run: python -m pytest -q --junitxml=fix-pytest-results.xml
+      - name: Upload fixed-tree pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix-windows-quoting-pytest
+          path: fix-pytest-results.xml
       - run: python -m ruff check vivado_session.py doctor.py tests
       - name: Commit verified fix
         shell: pwsh
