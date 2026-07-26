@@ -20,7 +20,8 @@ def find_wheel(argument: str) -> Path:
         return path
     wheels = sorted(path.glob("*.whl"))
     if len(wheels) != 1:
-        raise RuntimeError(f"Expected exactly one wheel in {path}, found {len(wheels)}")
+        message = f"Expected exactly one wheel in {path}, found {len(wheels)}"
+        raise RuntimeError(message)
     return wheels[0]
 
 
@@ -41,21 +42,30 @@ def main() -> int:
         if os.name == "nt":
             scripts = environment / "Scripts"
             python = scripts / "python.exe"
-            doctor = scripts / "vivado-mcp-doctor.exe"
+            doctor = scripts / "vivado-mcp-win-doctor.exe"
         else:
             scripts = environment / "bin"
             python = scripts / "python"
-            doctor = scripts / "vivado-mcp-doctor"
+            doctor = scripts / "vivado-mcp-win-doctor"
 
         subprocess.run(
-            [str(python), "-m", "pip", "install", "--disable-pip-version-check", str(wheel)],
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                str(wheel),
+            ],
             check=True,
             cwd=outside_source,
+            timeout=180,
         )
         subprocess.run(
             [str(python), "-c", "import vivado_mcp; print(vivado_mcp.__version__)"],
             check=True,
             cwd=outside_source,
+            timeout=30,
         )
 
         fake_bin = root / "AMD Tools (Package Smoke)" / "Vivado" / "2025.2" / "bin"
@@ -64,7 +74,8 @@ def main() -> int:
         if os.name == "nt":
             launcher = fake_bin / "vivado.bat"
             launcher.write_text(
-                '@echo off\r\npython "%~dp0fake_vivado.py" %*\r\n', encoding="utf-8"
+                '@echo off\r\npython "%~dp0fake_vivado.py" %*\r\n',
+                encoding="utf-8",
             )
         else:
             launcher = fake_bin / "vivado"
@@ -88,6 +99,7 @@ def main() -> int:
             text=True,
             encoding="utf-8",
             capture_output=True,
+            timeout=60,
         )
         if completed.returncode != 0:
             print(completed.stdout)
