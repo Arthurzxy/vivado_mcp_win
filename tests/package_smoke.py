@@ -24,7 +24,21 @@ def find_wheel(argument: str) -> Path:
     return wheels[0]
 
 
+def configure_output_streams() -> None:
+    """Make diagnostic output deterministic on Windows CI code pages."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main() -> int:
+    configure_output_streams()
     if len(sys.argv) != 2:
         raise SystemExit("usage: python tests/package_smoke.py <wheel-or-dist-directory>")
 
