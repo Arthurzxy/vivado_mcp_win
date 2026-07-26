@@ -119,7 +119,21 @@ def _print_human(report: dict[str, Any]) -> None:
             print(f"  {output}")
 
 
+def _configure_output_streams() -> None:
+    """Use deterministic UTF-8 output even on legacy Windows code pages."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _configure_output_streams()
     parser = argparse.ArgumentParser(
         description="Verify that Vivado MCP can locate and control a Vivado Tcl session."
     )
