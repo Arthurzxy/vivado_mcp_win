@@ -1,18 +1,14 @@
 # Vivado MCP
 
-**English** | [简体中文](README.zh-CN.md)
-
-[![Tests](https://github.com/Arthurzxy/vivado_mcp_win/actions/workflows/test.yml/badge.svg)](https://github.com/Arthurzxy/vivado_mcp_win/actions/workflows/test.yml)
-
 A cross-platform Model Context Protocol (MCP) server for **AMD/Xilinx Vivado**. It lets MCP-compatible AI clients start and manage Vivado, open projects, run synthesis and implementation, inspect timing and utilization, control simulation, and execute Tcl commands.
 
 This fork uses a persistent `subprocess` Tcl session that works natively on Windows and Linux. It does not depend on the Unix-only `pexpect` transport.
 
 > [!IMPORTANT]
-> Vivado is not included. Device support, design features, and licensing capabilities are determined by the Vivado installation on the host machine.
+> Vivado is not included. Device support, licensed features, and available FPGA families are determined by the Vivado installation on the host machine.
 
 > [!WARNING]
-> The name `vivado-mcp` on PyPI belongs to a different project. Do **not** use a bare `pip install vivado-mcp` when you intend to install this repository. Use one of the GitHub URL commands below.
+> The name `vivado-mcp` on PyPI belongs to a different project. Install this repository directly from GitHub rather than using a bare `pip install vivado-mcp`.
 
 ## Highlights
 
@@ -21,25 +17,22 @@ This fork uses a persistent `subprocess` Tcl session that works natively on Wind
 - One persistent Vivado Tcl process reused across MCP calls.
 - UUID-framed command protocol that separates stdout, Tcl return values, return codes, and error stacks.
 - UTF-8 hex transport for quotes, braces, backslashes, multiline Tcl, Unicode, and Windows paths.
-- Full process-tree cleanup after timeouts.
-- Automatic Vivado discovery through `VIVADO_PATH`, PATH, and common install directories.
-- A `vivado-mcp-win-doctor` command for testing a real Vivado installation.
-- Windows and Ubuntu CI for Python 3.10–3.12, plus clean wheel-install tests.
+- Full process-tree cleanup after command timeouts.
+- Vivado discovery through `VIVADO_PATH`, PATH, and common installation directories.
+- A `vivado-mcp-win-doctor` command for checking the local Python-to-Vivado connection.
 
-## Supported environment
+## Requirements
 
-| Component | Supported range |
+| Component | Requirement |
 |---|---|
-| Operating system | Windows 10/11 and Linux |
-| Python | 3.10, 3.11, and 3.12 |
-| Vivado | Designed around Vivado 2023.2+ launch conventions; other versions may also work |
-| FPGA families | Determined by the installed Vivado version and licenses |
+| Operating system | Windows 10/11 or Linux |
+| Python | 3.10–3.12 |
+| Vivado | Local AMD/Xilinx Vivado installation |
+| License | Appropriate for the operations and FPGA devices you use |
 
-## Fast installation
+## Installation
 
-### Option 1: pipx from GitHub — recommended
-
-This installs the server in an isolated environment and exposes dedicated commands without cloning the repository.
+### pipx from GitHub — recommended
 
 #### Windows PowerShell
 
@@ -49,13 +42,7 @@ py -m pipx ensurepath
 py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
 ```
 
-Restart the terminal after `ensurepath` if the command is not found.
-
-To test the current pull-request branch before it is merged:
-
-```powershell
-py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/agent/windows-native-support.zip"
-```
+Restart the terminal after `ensurepath` when necessary.
 
 #### Linux
 
@@ -68,12 +55,10 @@ python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_win/archive/ref
 Installed commands:
 
 - `vivado-mcp-win` — start the MCP server;
-- `vivado-mcp-win-doctor` — test the Python-to-Vivado connection;
+- `vivado-mcp-win-doctor` — check the local Vivado connection;
 - `vivado-mcp` and `vivado-mcp-doctor` — compatibility aliases.
 
-### Option 2: pip into a dedicated virtual environment
-
-This option also avoids cloning and is convenient when an MCP configuration needs an absolute Python path.
+### Dedicated virtual environment
 
 ```powershell
 $venv = "$env:LOCALAPPDATA\vivado-mcp-win"
@@ -82,68 +67,51 @@ py -3.11 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
 ```
 
-Linux equivalent:
+## Select the Vivado installation
 
-```bash
-python3 -m venv ~/.local/share/vivado-mcp-win
-~/.local/share/vivado-mcp-win/bin/python -m pip install --upgrade pip
-~/.local/share/vivado-mcp-win/bin/python -m pip install --upgrade \
-  "https://github.com/Arthurzxy/vivado_mcp_win/archive/refs/heads/master.zip"
+`VIVADO_PATH` and the `start_session` tool's `vivado_path` argument may point to:
+
+- the complete `vivado.bat`, `vivado.cmd`, `vivado.exe`, or Linux `vivado` launcher;
+- the Vivado `bin` directory;
+- the Vivado version directory.
+
+Example:
+
+```powershell
+$env:VIVADO_PATH = "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
 ```
 
-### Option 3: source installation for development
+Without an explicit path, the server checks PATH and common Windows locations such as:
 
-```bash
-git clone https://github.com/Arthurzxy/vivado_mcp_win.git
-cd vivado_mcp_win
-python -m pip install -e ".[dev]"
+```text
+C:\Xilinx\Vivado\*\bin\vivado.bat
+C:\AMD\Vivado\*\bin\vivado.bat
+C:\Program Files\AMD\Vivado\*\bin\vivado.bat
 ```
 
-## Test a real Vivado installation
-
-Run the doctor before configuring an MCP client:
+## Check the Vivado connection
 
 ```powershell
 vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
 ```
 
-The path may also be a Vivado `bin` directory or version directory:
-
-```powershell
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2"
-```
-
-The doctor performs these checks against the actual Vivado Tcl process:
-
-1. resolve the Vivado launcher;
-2. start a persistent Tcl session;
-3. run `version -short`;
-4. run `info patchlevel`;
-5. run `pwd`;
-6. evaluate `expr {6 * 7}` and verify the result is `42`;
-7. round-trip a Chinese Unicode string;
-8. run the session health check;
-9. stop Vivado cleanly.
-
-Use JSON output for automation or bug reports:
+The path may also be a Vivado `bin` directory or version directory. Machine-readable output is available with `--json`:
 
 ```powershell
 vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 ```
 
-A `PASS` result confirms the package can locate, launch, exchange framed Tcl commands with, and stop the installed Vivado instance. It does not run synthesis or implementation on a user project.
+The diagnostic command resolves the launcher, starts a persistent Tcl session, queries Vivado and Tcl versions, checks Tcl command transport and Unicode handling, verifies session health, and closes Vivado cleanly. It does not open or modify a user project.
 
 ## Configure an MCP client
 
-### pipx installation
-
-Find the absolute executable path:
+Find the installed executable:
 
 ```powershell
 (Get-Command vivado-mcp-win).Source
 ```
 
-Use that path in the MCP configuration:
+Example configuration for a pipx installation:
 
 ```json
 {
@@ -158,7 +126,7 @@ Use that path in the MCP configuration:
 }
 ```
 
-### Virtual-environment installation
+Example configuration for a virtual environment:
 
 ```json
 {
@@ -176,40 +144,6 @@ Use that path in the MCP configuration:
 
 Using an absolute executable or Python path avoids depending on the MCP client's PATH environment.
 
-## Vivado path resolution
-
-`VIVADO_PATH` and the `start_session` tool's `vivado_path` argument may point to:
-
-- a complete `vivado.bat`, `vivado.cmd`, `vivado.exe`, or Linux `vivado` file;
-- a Vivado `bin` directory;
-- a Vivado version directory.
-
-Without an explicit path, the server checks PATH and common locations. On Windows it searches paths such as:
-
-```text
-C:\Xilinx\Vivado\*\bin\vivado.bat
-C:\AMD\Vivado\*\bin\vivado.bat
-C:\Program Files\AMD\Vivado\*\bin\vivado.bat
-```
-
-The newest detected version is preferred.
-
-## What the automated Windows tests cover
-
-GitHub-hosted Windows runners do not include Vivado. The hosted suite therefore uses a Tcl-compatible fake launcher to exercise the same process and framing code used with Vivado:
-
-- `.bat` launch through `cmd.exe`;
-- launcher paths containing spaces and parentheses;
-- version-directory and environment-variable resolution;
-- persistent command execution;
-- stdout with and without a trailing newline;
-- Windows paths, braces, semicolons, multiline data, and Chinese Unicode;
-- Tcl errors and Vivado-style error messages;
-- timeout handling and process-tree termination;
-- wheel build, installation into a clean environment outside the source tree, console-script discovery, and doctor execution.
-
-A separate manual workflow, `.github/workflows/real-vivado-windows-smoke.yml`, targets a self-hosted Windows runner labelled `vivado`. It runs the doctor against an installed, licensed Vivado distribution. This workflow cannot run on GitHub's standard hosted runner because Vivado is not preinstalled there.
-
 ## Capabilities
 
 | Category | Representative tools | Purpose |
@@ -220,21 +154,18 @@ A separate manual workflow, `.github/workflows/real-vivado-windows-smoke.yml`, t
 | Reports | `get_timing_summary`, `get_timing_paths`, `get_utilization`, `get_clocks`, `get_messages` | Read timing, resource, clock, and message reports |
 | Design queries | `get_design_hierarchy`, `get_ports`, `get_nets`, `get_cells` | Inspect hierarchy, ports, nets, and cells |
 | Simulation | `launch_simulation`, `run_simulation`, `restart_simulation`, `get_signal_value` | Control xsim and inspect signals |
-| Advanced | `run_tcl`, `generate_full_report`, `read_report_section` | Execute arbitrary Tcl and read large reports |
+| Advanced | `run_tcl`, `generate_full_report`, `read_report_section` | Execute Tcl and read large reports |
 
 ## Architecture
 
 ```text
-┌────────────────────┐      MCP / stdio       ┌────────────────────┐
-│ MCP-compatible     │ ◄────────────────────► │ Vivado MCP Server  │
-│ client             │                         └─────────┬──────────┘
-└────────────────────┘                                   │ subprocess
-                                                         │ persistent Tcl
-                                                         ▼
-                                               ┌────────────────────┐
-                                               │ AMD/Xilinx Vivado  │
-                                               │     -mode tcl      │
-                                               └────────────────────┘
+MCP-compatible client
+        │ MCP / stdio
+        ▼
+Vivado MCP server
+        │ persistent subprocess Tcl session
+        ▼
+AMD/Xilinx Vivado -mode tcl
 ```
 
 Each command is transported as UTF-8 hex and wrapped with unique markers. The server extracts stdout, the Tcl result, return code, and error stack without relying on the localized `Vivado%` prompt.
@@ -249,22 +180,17 @@ Verify the launcher directly:
 & "D:\Xilinx\Vivado\2025.2\bin\vivado.bat" -mode tcl
 ```
 
-Then run `vivado-mcp-win-doctor` and inspect the failed step. Check the path, Vivado installation, permissions, environment, and license configuration.
+Then run `vivado-mcp-win-doctor` and check the path, installation, permissions, environment, and license configuration.
 
 ### Chinese output is corrupted
 
-The Windows decoder defaults to the system preferred encoding. Override it when necessary:
+Override the Windows output decoder when necessary:
 
 ```powershell
 $env:VIVADO_MCP_OUTPUT_ENCODING = "gbk"
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2"
 ```
 
-Use `utf-8`, `gbk`, or the encoding that matches the Vivado Tcl console on that computer.
-
-### The MCP client cannot find the command
-
-Use `(Get-Command vivado-mcp-win).Source` and put the returned absolute path in the client configuration. Restart the client after editing its configuration.
+Use `utf-8`, `gbk`, or the encoding that matches the Vivado Tcl console.
 
 ### A command times out
 
@@ -275,17 +201,6 @@ More Windows guidance is available in [`WINDOWS_INSTALL.md`](WINDOWS_INSTALL.md)
 ## Security
 
 `run_tcl` can execute arbitrary Tcl with the current user's permissions, including file operations and external process launches. Expose this server only to trusted MCP clients and review high-impact commands and paths.
-
-## Development
-
-```bash
-python -m pip install -e ".[dev]"
-python -m compileall -q .
-python -m pytest -q
-python -m ruff check vivado_session.py doctor.py tests
-python -m build --wheel
-python tests/package_smoke.py dist
-```
 
 ## License
 
