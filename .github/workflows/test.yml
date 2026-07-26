@@ -20,7 +20,13 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m compileall -q .
-      - run: python -m pytest -q
+      - run: python -m pytest -q --junitxml=pytest-results.xml
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-${{ matrix.os }}-${{ matrix.python-version }}
+          path: pytest-results.xml
 
   lint:
     runs-on: ubuntu-latest
