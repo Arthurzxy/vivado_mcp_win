@@ -4,14 +4,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - .release/0.2.1.trigger
 
 concurrency:
   group: package-publish
   cancel-in-progress: false
+
+env:
+  DISTRIBUTION_NAME: vivado-mcp-native
+  MCP_SERVER_NAME: io.github.Arthurzxy/vivado-mcp-native
+  MCP_SERVER_NAME_ENCODED: io.github.Arthurzxy%2Fvivado-mcp-native
 
 jobs:
   build:
@@ -19,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
 
     steps:
       - name: Check out repository
@@ -32,32 +35,53 @@ jobs:
       - name: Install build tools
         run: python -m pip install --upgrade build twine
 
-      - name: Verify release versions are aligned
+      - name: Verify and export release metadata
+        id: metadata
         run: |
           python - <<'PY'
           import json
+          import os
           import pathlib
           import re
           import tomllib
 
-          expected = "0.2.1"
           project = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
           server = json.loads(pathlib.Path("server.json").read_text(encoding="utf-8"))
+          readme = pathlib.Path("README.md").read_text(encoding="utf-8")
           init_text = pathlib.Path("__init__.py").read_text(encoding="utf-8")
           module_version = re.search(r'__version__\s*=\s*"([^"]+)"', init_text).group(1)
 
+          distribution = project["project"]["name"]
+          version = project["project"]["version"]
+          package = server["packages"][0]
+
           values = {
-              "pyproject": project["project"]["version"],
+              "pyproject": version,
               "module": module_version,
               "server": server["version"],
-              "package": server["packages"][0]["version"],
+              "package": package["version"],
           }
-          if any(value != expected for value in values.values()):
+          if len(set(values.values())) != 1:
               raise SystemExit(f"Version mismatch: {values}")
-          if server["name"] != "io.github.Arthurzxy/vivado-mcp-native":
-              raise SystemExit("Unexpected MCP Registry server name")
+          if distribution != os.environ["DISTRIBUTION_NAME"]:
+              raise SystemExit(f"Unexpected distribution name: {distribution}")
+          if server["name"] != os.environ["MCP_SERVER_NAME"]:
+              raise SystemExit(f"Unexpected MCP server name: {server['name']}")
+          if package["registryType"] != "pypi" or package["identifier"] != distribution:
+              raise SystemExit(f"Unexpected Registry package metadata: {package}")
+          if f"mcp-name: {server['name']}" not in readme:
+              raise SystemExit("README is missing the MCP Registry ownership marker")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
           print(values)
           PY
+
+      - name: Check release tag matches package version
+        if: github.event_name == 'release'
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: test "${GITHUB_REF_NAME#v}" = "$VERSION"
 
       - name: Build wheel and source distribution
         run: python -m build
@@ -72,31 +96,34 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  publish-pypi:
-    name: Ensure version 0.2.1 is on PyPI
+  publish:
+    name: Publish package and Registry metadata
     needs: build
     runs-on: ubuntu-latest
-
     environment:
       name: pypi
-      url: https://pypi.org/p/vivado-mcp-native
-
+      url: https://pypi.org/project/vivado-mcp-native/
     permissions:
+      contents: read
       id-token: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      PYPI_VERSION_URL: https://pypi.org/pypi/vivado-mcp-native/${{ needs.build.outputs.version }}/json
+      REGISTRY_VERSION_URL: https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Arthurzxy%2Fvivado-mcp-native/versions/${{ needs.build.outputs.version }}
 
     steps:
-      - name: Check whether PyPI 0.2.1 already exists
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check whether the PyPI version exists
         id: pypi
         shell: bash
         run: |
-          if curl --fail --silent --show-error \
-            https://pypi.org/pypi/vivado-mcp-native/0.2.1/json \
-            >/dev/null; then
+          if curl --fail --silent --show-error "$PYPI_VERSION_URL" >/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "PyPI version 0.2.1 already exists; upload will be skipped."
+            echo "PyPI version $VERSION already exists; upload will be skipped."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "PyPI version 0.2.1 is not visible yet; upload is required."
           fi
 
       - name: Download distributions
@@ -110,58 +137,31 @@ jobs:
         if: steps.pypi.outputs.exists != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Confirm PyPI version 0.2.1
+      - name: Wait for PyPI propagation
         shell: bash
         run: |
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error \
-              https://pypi.org/pypi/vivado-mcp-native/0.2.1/json \
-              >/dev/null; then
-              echo "PyPI version 0.2.1 is available."
-              exit 0
-            fi
+            curl --fail --silent --show-error "$PYPI_VERSION_URL" >/dev/null && exit 0
             echo "Waiting for PyPI propagation ($attempt/30)..."
             sleep 10
           done
-          echo "PyPI version 0.2.1 did not become available in time."
           exit 1
 
-  publish-registry:
-    name: Ensure metadata is in the official MCP Registry
-    needs: publish-pypi
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Check whether Registry version 0.2.1 already exists
+      - name: Check whether the MCP Registry version exists
         id: registry
         shell: bash
         run: |
-          response="$(curl --silent --show-error --get \
-            --data-urlencode 'search=io.github.Arthurzxy/vivado-mcp-native' \
-            https://registry.modelcontextprotocol.io/v0.1/servers || true)"
-          if printf '%s' "$response" | jq -e \
-            --arg name 'io.github.Arthurzxy/vivado-mcp-native' \
-            --arg version '0.2.1' \
-            '.. | objects | select(.name? == $name and .version? == $version)' \
-            >/dev/null; then
+          if curl --path-as-is --fail --silent --show-error "$REGISTRY_VERSION_URL" >/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Registry version 0.2.1 already exists; publishing will be skipped."
+            echo "MCP Registry version $VERSION already exists; publish will be skipped."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Registry version 0.2.1 is not visible yet; publishing is required."
           fi
 
       - name: Install mcp-publisher
         if: steps.registry.outputs.exists != 'true'
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
-            | tar xz mcp-publisher
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
           ./mcp-publisher --help
 
       - name: Authenticate to MCP Registry
@@ -170,96 +170,37 @@ jobs:
 
       - name: Publish to MCP Registry
         if: steps.registry.outputs.exists != 'true'
-        id: registry_publish
-        continue-on-error: true
         run: ./mcp-publisher publish
 
-      - name: Confirm Registry version 0.2.1
+      - name: Wait for MCP Registry propagation
         shell: bash
         run: |
           for attempt in $(seq 1 30); do
-            response="$(curl --silent --show-error --get \
-              --data-urlencode 'search=io.github.Arthurzxy/vivado-mcp-native' \
-              https://registry.modelcontextprotocol.io/v0.1/servers || true)"
-            if printf '%s' "$response" | jq -e \
-              --arg name 'io.github.Arthurzxy/vivado-mcp-native' \
-              --arg version '0.2.1' \
-              '.. | objects | select(.name? == $name and .version? == $version)' \
-              >/dev/null; then
-              echo "MCP Registry version 0.2.1 is available."
-              exit 0
-            fi
+            curl --path-as-is --fail --silent --show-error "$REGISTRY_VERSION_URL" >/dev/null && exit 0
             echo "Waiting for MCP Registry propagation ($attempt/30)..."
             sleep 10
           done
-          echo "MCP Registry version 0.2.1 did not become available in time."
-          if [ "${{ steps.registry_publish.outcome }}" = "failure" ]; then
-            echo "The mcp-publisher command also reported a failure."
-          fi
           exit 1
 
-  report:
-    name: Report release result
-    if: always()
-    needs: [build, publish-pypi, publish-registry]
+  verify-publication:
+    name: Verify public endpoints
+    needs: [build, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      PYPI_VERSION_URL: https://pypi.org/pypi/vivado-mcp-native/${{ needs.build.outputs.version }}/json
+      REGISTRY_VERSION_URL: https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Arthurzxy%2Fvivado-mcp-native/versions/${{ needs.build.outputs.version }}
 
     steps:
-      - name: Probe public package and Registry endpoints
-        id: probe
-        shell: bash
+      - name: Verify PyPI version
+        run: curl --fail --silent --show-error "$PYPI_VERSION_URL" >/dev/null
+
+      - name: Verify official MCP Registry version
+        run: curl --path-as-is --fail --silent --show-error "$REGISTRY_VERSION_URL" >/dev/null
+
+      - name: Print publication links
         run: |
-          if curl --fail --silent --show-error \
-            https://pypi.org/pypi/vivado-mcp-native/0.2.1/json \
-            >/dev/null; then
-            echo "pypi=visible" >> "$GITHUB_OUTPUT"
-          else
-            echo "pypi=not-visible" >> "$GITHUB_OUTPUT"
-          fi
-
-          response="$(curl --silent --show-error --get \
-            --data-urlencode 'search=io.github.Arthurzxy/vivado-mcp-native' \
-            https://registry.modelcontextprotocol.io/v0.1/servers || true)"
-          if printf '%s' "$response" | jq -e \
-            --arg name 'io.github.Arthurzxy/vivado-mcp-native' \
-            --arg version '0.2.1' \
-            '.. | objects | select(.name? == $name and .version? == $version)' \
-            >/dev/null; then
-            echo "registry=visible" >> "$GITHUB_OUTPUT"
-          else
-            echo "registry=not-visible" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Post result to PR 14
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_RESULT: ${{ needs.build.result }}
-          PYPI_JOB_RESULT: ${{ needs.publish-pypi.result }}
-          REGISTRY_JOB_RESULT: ${{ needs.publish-registry.result }}
-          PYPI_VISIBLE: ${{ steps.probe.outputs.pypi }}
-          REGISTRY_VISIBLE: ${{ steps.probe.outputs.registry }}
-        shell: bash
-        run: |
-          body=$(cat <<EOF
-          ## 0.2.1 release automation result
-
-          - Actions run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          - Build job: ${BUILD_RESULT}
-          - PyPI job: ${PYPI_JOB_RESULT}
-          - MCP Registry job: ${REGISTRY_JOB_RESULT}
-          - PyPI public endpoint: ${PYPI_VISIBLE}
-          - MCP Registry public endpoint: ${REGISTRY_VISIBLE}
-
-          Links:
-          - PyPI: https://pypi.org/project/vivado-mcp-native/0.2.1/
-          - MCP Registry: https://registry.modelcontextprotocol.io/?q=io.github.Arthurzxy%2Fvivado-mcp-native
-          EOF
-          )
-          gh api "repos/${GITHUB_REPOSITORY}/issues/14/comments" -f body="$body"
-
-      - name: Fail when publication is not publicly visible
-        if: steps.probe.outputs.pypi != 'visible' || steps.probe.outputs.registry != 'visible'
-        run: exit 1
+          echo "PyPI: https://pypi.org/project/vivado-mcp-native/${VERSION}/"
+          echo "MCP Registry: https://registry.modelcontextprotocol.io/?q=io.github.Arthurzxy%2Fvivado-mcp-native"
