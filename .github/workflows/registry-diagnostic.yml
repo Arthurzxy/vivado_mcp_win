@@ -1,0 +1,45 @@
+name: MCP Registry API diagnostic
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .release/0.2.1.pr-trigger
+
+jobs:
+  diagnostic:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Query Registry API
+        shell: bash
+        run: |
+          set +e
+
+          probe() {
+            label="$1"
+            url="$2"
+            echo "===== ${label} ====="
+            code=$(curl --path-as-is --silent --show-error --location \
+              --output response.json --write-out '%{http_code}' "$url")
+            echo "HTTP ${code}"
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          text = Path("response.json").read_text(encoding="utf-8", errors="replace")
+          try:
+              data = json.loads(text)
+              print(json.dumps(data, ensure_ascii=False, indent=2)[:30000])
+          except Exception:
+              print(text[:30000])
+          PY
+          }
+
+          probe "search exact" "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Arthurzxy%2Fvivado-mcp-native"
+          probe "search lowercase" "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.arthurzxy%2Fvivado-mcp-native"
+          probe "version exact encoded" "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Arthurzxy%2Fvivado-mcp-native/versions/0.2.1"
+          probe "version lowercase encoded" "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.arthurzxy%2Fvivado-mcp-native/versions/0.2.1"
+          probe "version exact double encoded" "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Arthurzxy%252Fvivado-mcp-native/versions/0.2.1"
