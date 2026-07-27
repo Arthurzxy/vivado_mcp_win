@@ -1,0 +1,269 @@
+name: prepare-pypi-release
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - .github/workflows/prepare-pypi-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Update package metadata and documentation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          pyproject = '''[build-system]
+          requires = ["setuptools>=61.0"]
+          build-backend = "setuptools.build_meta"
+
+          [project]
+          name = "vivado-mcp-native"
+          version = "0.2.0"
+          description = "Native cross-platform MCP server for AMD/Xilinx Vivado FPGA development"
+          readme = "README.md"
+          license = {text = "MIT"}
+          requires-python = ">=3.10"
+          authors = [
+              {name = "Arthurzxy"}
+          ]
+          keywords = ["mcp", "vivado", "fpga", "xilinx", "amd", "eda", "ai"]
+          classifiers = [
+              "Development Status :: 4 - Beta",
+              "Intended Audience :: Developers",
+              "License :: OSI Approved :: MIT License",
+              "Operating System :: Microsoft :: Windows :: Windows 10",
+              "Operating System :: Microsoft :: Windows :: Windows 11",
+              "Operating System :: POSIX :: Linux",
+              "Programming Language :: Python :: 3",
+              "Programming Language :: Python :: 3.10",
+              "Programming Language :: Python :: 3.11",
+              "Programming Language :: Python :: 3.12",
+              "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+          ]
+          dependencies = [
+              "mcp>=1.0.0",
+              "psutil>=5.9.0",
+              "typing-extensions>=4.6",
+          ]
+
+          [project.scripts]
+          vivado-mcp-native = "vivado_mcp:main"
+          vivado-mcp-native-doctor = "vivado_mcp.doctor:main"
+          vivado-mcp-win = "vivado_mcp:main"
+          vivado-mcp-win-doctor = "vivado_mcp.doctor:main"
+
+          [project.urls]
+          Homepage = "https://github.com/Arthurzxy/vivado_mcp_native"
+          Repository = "https://github.com/Arthurzxy/vivado_mcp_native"
+          Issues = "https://github.com/Arthurzxy/vivado_mcp_native/issues"
+
+          [tool.setuptools]
+          packages = ["vivado_mcp"]
+          package-dir = {"vivado_mcp" = "."}
+
+          [tool.setuptools.package-data]
+          vivado_mcp = ["data/*.json"]
+          '''
+          Path("pyproject.toml").write_text(pyproject, encoding="utf-8")
+
+          def replace_section(text: str, start: str, end: str, replacement: str) -> str:
+              before, rest = text.split(start, 1)
+              _, after = rest.split(end, 1)
+              return before + replacement.rstrip() + "\n\n" + end + after
+
+          readme = Path("README.md").read_text(encoding="utf-8")
+          readme = readme.replace(
+              "**English** | [简体中文](README.zh-CN.md)",
+              "**English** | [简体中文](https://github.com/Arthurzxy/vivado_mcp_native/blob/master/README.zh-CN.md)",
+          )
+          readme = readme.replace(
+              "> The name `vivado-mcp` on PyPI belongs to a different project. Install this repository directly from GitHub rather than using a bare `pip install vivado-mcp`.",
+              "> The name `vivado-mcp` on PyPI belongs to a different project. Install this project as `vivado-mcp-native`.",
+          )
+          readme = readme.replace("vivado-mcp-win-doctor", "vivado-mcp-native-doctor")
+          readme = readme.replace("vivado-mcp-win", "vivado-mcp-native")
+          readme = replace_section(
+              readme,
+              "## Installation",
+              "## Select the Vivado installation",
+              '''## Installation
+
+          ### From PyPI — recommended
+
+          Install the isolated command-line application with `pipx`:
+
+          ```powershell
+          py -m pip install --user --upgrade pipx
+          py -m pipx ensurepath
+          py -m pipx install vivado-mcp-native
+          ```
+
+          Linux:
+
+          ```bash
+          python3 -m pip install --user --upgrade pipx
+          python3 -m pipx ensurepath
+          python3 -m pipx install vivado-mcp-native
+          ```
+
+          Installed commands:
+
+          - `vivado-mcp-native` — start the MCP server;
+          - `vivado-mcp-native-doctor` — check the local Vivado connection;
+          - `vivado-mcp-win` and `vivado-mcp-win-doctor` — compatibility aliases.
+
+          ### Install the latest source from GitHub
+
+          ```powershell
+          py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+          ```
+
+          ### Dedicated virtual environment
+
+          ```powershell
+          $venv = "$env:LOCALAPPDATA\\vivado-mcp-native"
+          py -3.11 -m venv $venv
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade pip
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade vivado-mcp-native
+          ```''',
+          )
+          Path("README.md").write_text(readme, encoding="utf-8")
+
+          zh = Path("README.zh-CN.md").read_text(encoding="utf-8")
+          zh = zh.replace(
+              "[English](README.md) | **简体中文**",
+              "[English](https://github.com/Arthurzxy/vivado_mcp_native/blob/master/README.md) | **简体中文**",
+          )
+          zh = zh.replace(
+              "> PyPI 上的 `vivado-mcp` 名称属于另一个项目。请直接从 GitHub 安装本仓库，不要使用不带来源地址的 `pip install vivado-mcp`。",
+              "> PyPI 上的 `vivado-mcp` 名称属于另一个项目。本项目的发行名称为 `vivado-mcp-native`。",
+          )
+          zh = zh.replace("vivado-mcp-win-doctor", "vivado-mcp-native-doctor")
+          zh = zh.replace("vivado-mcp-win", "vivado-mcp-native")
+          zh = replace_section(
+              zh,
+              "## 安装",
+              "## 选择 Vivado 安装位置",
+              '''## 安装
+
+          ### 从 PyPI 安装（推荐）
+
+          推荐使用 `pipx` 创建隔离环境并安装命令行程序：
+
+          ```powershell
+          py -m pip install --user --upgrade pipx
+          py -m pipx ensurepath
+          py -m pipx install vivado-mcp-native
+          ```
+
+          Linux：
+
+          ```bash
+          python3 -m pip install --user --upgrade pipx
+          python3 -m pipx ensurepath
+          python3 -m pipx install vivado-mcp-native
+          ```
+
+          安装后可用的命令：
+
+          - `vivado-mcp-native`：启动 MCP 服务器；
+          - `vivado-mcp-native-doctor`：检查本机 Vivado 连接；
+          - `vivado-mcp-win` 和 `vivado-mcp-win-doctor`：兼容别名。
+
+          ### 从 GitHub 安装最新源码
+
+          ```powershell
+          py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+          ```
+
+          ### 安装到独立虚拟环境
+
+          ```powershell
+          $venv = "$env:LOCALAPPDATA\\vivado-mcp-native"
+          py -3.11 -m venv $venv
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade pip
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade vivado-mcp-native
+          ```''',
+          )
+          Path("README.zh-CN.md").write_text(zh, encoding="utf-8")
+
+          win = Path("WINDOWS_INSTALL.md").read_text(encoding="utf-8")
+          win = win.replace(
+              "> The PyPI name `vivado-mcp` belongs to a different project. Install this repository directly from GitHub.",
+              "> The PyPI name `vivado-mcp` belongs to a different project. Install this project as `vivado-mcp-native`.",
+          )
+          win = win.replace("https://github.com/Arthurzxy/vivado_mcp_win", "https://github.com/Arthurzxy/vivado_mcp_native")
+          win = win.replace("vivado-mcp-win-doctor", "vivado-mcp-native-doctor")
+          win = win.replace("vivado-mcp-win", "vivado-mcp-native")
+          win = replace_section(
+              win,
+              "## Recommended installation: pipx",
+              "## Select the Vivado installation",
+              '''## Recommended installation: pipx
+
+          ```powershell
+          py -m pip install --user --upgrade pipx
+          py -m pipx ensurepath
+          py -m pipx install vivado-mcp-native
+          ```
+
+          Restart PowerShell if the command is not found after `ensurepath`.
+
+          Installed commands:
+
+          ```text
+          vivado-mcp-native
+          vivado-mcp-native-doctor
+          vivado-mcp-win
+          vivado-mcp-win-doctor
+          ```
+
+          ## Install the latest source from GitHub
+
+          ```powershell
+          py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+          ```
+
+          ## Alternative: dedicated virtual environment
+
+          ```powershell
+          $venv = "$env:LOCALAPPDATA\\vivado-mcp-native"
+          py -3.11 -m venv $venv
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade pip
+          & "$venv\\Scripts\\python.exe" -m pip install --upgrade vivado-mcp-native
+          ```
+
+          The server can then be started with:
+
+          ```powershell
+          & "$venv\\Scripts\\vivado-mcp-native.exe"
+          ```
+
+          The command is a stdio MCP server, so it normally appears idle when launched directly. It expects an MCP client to communicate over stdin/stdout.''',
+          )
+          Path("WINDOWS_INSTALL.md").write_text(win, encoding="utf-8")
+          PY
+
+      - name: Commit prepared release files
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml README.md README.zh-CN.md WINDOWS_INSTALL.md
+          git commit -m "Prepare vivado-mcp-native for PyPI" || exit 0
+          git push origin dev
