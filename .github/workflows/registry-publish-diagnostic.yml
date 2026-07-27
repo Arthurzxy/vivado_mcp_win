@@ -18,18 +18,31 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Show Registry metadata
-        run: |
-          cat server.json
-          grep -n "mcp-name:" README.md
-
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
-          ./mcp-publisher --help
 
       - name: Authenticate to MCP Registry
         run: ./mcp-publisher login github-oidc
 
-      - name: Publish and expose exact result
-        run: ./mcp-publisher publish
+      - name: Capture publisher output
+        id: publish
+        shell: bash
+        run: |
+          set +e
+          ./mcp-publisher publish >mcp-publisher.log 2>&1
+          code=$?
+          echo "exit_code=${code}" >mcp-publisher-status.txt
+          echo "Publisher exit code: ${code}"
+          exit 0
+
+      - name: Upload complete publisher diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-publisher-diagnostic
+          path: |
+            server.json
+            README.md
+            mcp-publisher.log
+            mcp-publisher-status.txt
+          if-no-files-found: error
