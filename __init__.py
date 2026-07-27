@@ -1,39 +1,39 @@
 """
-Vivado MCP Server - Direct integration with AMD/Xilinx Vivado.
+Vivado MCP Native - Direct integration with AMD/Xilinx Vivado.
 
 This package provides a Model Context Protocol (MCP) server that allows
-AI assistants like Claude to directly interact with AMD/Xilinx Vivado
-FPGA development tools.
+AI assistants to interact with AMD/Xilinx Vivado FPGA development tools.
 
 Features:
-    - Session Management: Start/stop persistent Vivado TCL sessions
+    - Session Management: Start/stop persistent Vivado Tcl sessions
     - Project Management: Open/close Vivado projects (.xpr files)
     - Design Flow: Run synthesis, implementation, and bitstream generation
     - Reports: Get timing summaries, utilization, and design analysis
     - Design Queries: Explore design hierarchy, ports, nets, and cells
     - Simulation: Control Vivado's integrated simulator (xsim)
-    - Raw TCL: Execute arbitrary Vivado TCL commands
+    - Raw Tcl: Execute arbitrary Vivado Tcl commands
 
 Installation:
-    pip install -e .
+    pip install vivado-mcp-native
 
-    Or add to your Claude Code MCP configuration:
-    {
-        "mcpServers": {
-            "vivado": {
-                "command": "python",
-                "args": ["-m", "vivado_mcp"]
-            }
-        }
-    }
+    Or install the isolated application with pipx:
+    pipx install vivado-mcp-native
 
 Usage:
-    The server is typically launched by an MCP client (like Claude Code).
-    For manual testing:
+    The server is typically launched by an MCP client.
 
+    Main commands:
+    - vivado-mcp-native
+    - vivado-mcp-native-doctor
+
+    Compatibility aliases:
+    - vivado-mcp-win
+    - vivado-mcp-win-doctor
+
+    The package can also be started with:
     python -m vivado_mcp
 
-Example workflow (from an AI assistant):
+Example workflow:
     1. start_session - Launch Vivado
     2. open_project - Open a .xpr file
     3. run_synthesis - Synthesize the design
@@ -43,34 +43,25 @@ Example workflow (from an AI assistant):
 
 Requirements:
     - Python 3.10+
-    - mcp>=1.0.0 (Model Context Protocol library)
-    - Python standard-library subprocess support
-    - AMD/Xilinx Vivado installed and in PATH
+    - mcp>=1.0.0
+    - psutil>=5.9.0
+    - AMD/Xilinx Vivado installed locally
 
-Author: Created with Claude (Anthropic)
+Author: Arthurzxy
 License: MIT
 Version: 0.2.0
 """
 
 import asyncio
+
 from .server import main as _async_main
 
-# Package version
 __version__ = "0.2.0"
 
 
 def main():
-    """
-    Entry point for the vivado-mcp console script.
-
-    This function is called when running:
-    - vivado-mcp (after pip install)
-    - python -m vivado_mcp
-
-    It starts the async MCP server event loop.
-    """
+    """Start the Vivado MCP Native stdio server."""
     asyncio.run(_async_main())
 
 
-# Public API - what gets imported with "from vivado_mcp import *"
 __all__ = ["main", "__version__"]
