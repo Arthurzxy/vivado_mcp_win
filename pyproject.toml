@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vivado-mcp"
+name = "vivado-mcp-native"
 version = "0.2.0"
-description = "Cross-platform MCP server for AMD/Xilinx Vivado FPGA development"
+description = "Native cross-platform MCP server for AMD/Xilinx Vivado FPGA development"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Created with Claude", email = "noreply@anthropic.com"}
+    {name = "Arthurzxy"}
 ]
-keywords = ["mcp", "vivado", "fpga", "xilinx", "amd", "claude", "ai"]
+keywords = ["mcp", "vivado", "fpga", "xilinx", "amd", "eda", "ai"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -33,15 +33,15 @@ dependencies = [
 ]
 
 [project.scripts]
-vivado-mcp = "vivado_mcp:main"
-vivado-mcp-doctor = "vivado_mcp.doctor:main"
+vivado-mcp-native = "vivado_mcp:main"
+vivado-mcp-native-doctor = "vivado_mcp.doctor:main"
 vivado-mcp-win = "vivado_mcp:main"
 vivado-mcp-win-doctor = "vivado_mcp.doctor:main"
 
 [project.urls]
-Homepage = "https://github.com/Arthurzxy/vivado_mcp_win"
-Repository = "https://github.com/Arthurzxy/vivado_mcp_win"
-Issues = "https://github.com/Arthurzxy/vivado_mcp_win/issues"
+Homepage = "https://github.com/Arthurzxy/vivado_mcp_native"
+Repository = "https://github.com/Arthurzxy/vivado_mcp_native"
+Issues = "https://github.com/Arthurzxy/vivado_mcp_native/issues"
 
 [tool.setuptools]
 packages = ["vivado_mcp"]

@@ -1,6 +1,6 @@
 # Vivado MCP Native
 
-**English** | [简体中文](README.zh-CN.md)
+**English** | [简体中文](https://github.com/Arthurzxy/vivado_mcp_native/blob/master/README.zh-CN.md)
 
 A cross-platform Model Context Protocol (MCP) server for **AMD/Xilinx Vivado**. It lets MCP-compatible AI clients start and manage Vivado, open projects, run synthesis and implementation, inspect timing and utilization, control simulation, and execute Tcl commands.
 
@@ -10,7 +10,7 @@ This project uses a persistent `subprocess` Tcl session that works natively on W
 > Vivado is not included. Device support, licensed features, and available FPGA families are determined by the Vivado installation on the host machine.
 
 > [!WARNING]
-> The name `vivado-mcp` on PyPI belongs to a different project. Install this repository directly from GitHub rather than using a bare `pip install vivado-mcp`.
+> The name `vivado-mcp` on PyPI belongs to a different project. Install this project as `vivado-mcp-native`.
 
 ## Highlights
 
@@ -21,7 +21,7 @@ This project uses a persistent `subprocess` Tcl session that works natively on W
 - UTF-8 hex transport for quotes, braces, backslashes, multiline Tcl, Unicode, and Windows paths.
 - Full process-tree cleanup after command timeouts.
 - Vivado discovery through `VIVADO_PATH`, PATH, and common installation directories.
-- A `vivado-mcp-win-doctor` command for checking the local Python-to-Vivado connection.
+- A `vivado-mcp-native-doctor` command for checking the local Python-to-Vivado connection.
 
 ## Requirements
 
@@ -34,39 +34,43 @@ This project uses a persistent `subprocess` Tcl session that works natively on W
 
 ## Installation
 
-### pipx from GitHub — recommended
+### From PyPI — recommended
 
-#### Windows PowerShell
+Install the isolated command-line application with `pipx`:
 
 ```powershell
 py -m pip install --user --upgrade pipx
 py -m pipx ensurepath
-py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+py -m pipx install vivado-mcp-native
 ```
 
-Restart the terminal after `ensurepath` when necessary.
-
-#### Linux
+Linux:
 
 ```bash
 python3 -m pip install --user --upgrade pipx
 python3 -m pipx ensurepath
-python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+python3 -m pipx install vivado-mcp-native
 ```
 
 Installed commands:
 
-- `vivado-mcp-win` — start the MCP server;
-- `vivado-mcp-win-doctor` — check the local Vivado connection;
-- `vivado-mcp` and `vivado-mcp-doctor` — compatibility aliases.
+- `vivado-mcp-native` — start the MCP server;
+- `vivado-mcp-native-doctor` — check the local Vivado connection;
+- `vivado-mcp-win` and `vivado-mcp-win-doctor` — compatibility aliases.
+
+### Install the latest source from GitHub
+
+```powershell
+py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+```
 
 ### Dedicated virtual environment
 
 ```powershell
-$venv = "$env:LOCALAPPDATA\vivado-mcp-win"
+$venv = "$env:LOCALAPPDATA\vivado-mcp-native"
 py -3.11 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --upgrade pip
-& "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+& "$venv\Scripts\python.exe" -m pip install --upgrade vivado-mcp-native
 ```
 
 ## Select the Vivado installation
@@ -94,13 +98,13 @@ C:\Program Files\AMD\Vivado\*\bin\vivado.bat
 ## Check the Vivado connection
 
 ```powershell
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
+vivado-mcp-native-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
 ```
 
 The path may also be a Vivado `bin` directory or version directory. Machine-readable output is available with `--json`:
 
 ```powershell
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
+vivado-mcp-native-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 ```
 
 The diagnostic command resolves the launcher, starts a persistent Tcl session, queries Vivado and Tcl versions, checks Tcl command transport and Unicode handling, verifies session health, and closes Vivado cleanly. It does not open or modify a user project.
@@ -110,7 +114,7 @@ The diagnostic command resolves the launcher, starts a persistent Tcl session, q
 Find the installed executable:
 
 ```powershell
-(Get-Command vivado-mcp-win).Source
+(Get-Command vivado-mcp-native).Source
 ```
 
 Example configuration for a pipx installation:
@@ -119,7 +123,7 @@ Example configuration for a pipx installation:
 {
   "mcpServers": {
     "vivado": {
-      "command": "C:\\Users\\you\\.local\\bin\\vivado-mcp-win.exe",
+      "command": "C:\\Users\\you\\.local\\bin\\vivado-mcp-native.exe",
       "env": {
         "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
       }
@@ -134,7 +138,7 @@ Example configuration for a virtual environment:
 {
   "mcpServers": {
     "vivado": {
-      "command": "C:\\Users\\you\\AppData\\Local\\vivado-mcp-win\\Scripts\\python.exe",
+      "command": "C:\\Users\\you\\AppData\\Local\\vivado-mcp-native\\Scripts\\python.exe",
       "args": ["-m", "vivado_mcp"],
       "env": {
         "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
@@ -182,7 +186,7 @@ Verify the launcher directly:
 & "D:\Xilinx\Vivado\2025.2\bin\vivado.bat" -mode tcl
 ```
 
-Then run `vivado-mcp-win-doctor` and check the path, installation, permissions, environment, and license configuration.
+Then run `vivado-mcp-native-doctor` and check the path, installation, permissions, environment, and license configuration.
 
 ### Chinese output is corrupted
 
