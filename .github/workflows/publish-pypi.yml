@@ -8,6 +8,10 @@ on:
     branches: [master]
     paths:
       - .release/0.2.1.trigger
+  pull_request:
+    branches: [master]
+    paths:
+      - .release/0.2.1.pr-trigger
 
 concurrency:
   group: package-publish
@@ -16,6 +20,7 @@ concurrency:
 jobs:
   build:
     name: Build distributions
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'dev')
     runs-on: ubuntu-latest
     permissions:
       contents: read
