@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vivado-mcp-native"
-version = "0.2.0"
+version = "0.2.1"
 description = "Native cross-platform MCP server for AMD/Xilinx Vivado FPGA development"
 readme = "README.md"
 license = {text = "MIT"}
@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "Arthurzxy"}
 ]
-keywords = ["mcp", "vivado", "fpga", "xilinx", "amd", "eda", "ai"]
+keywords = ["mcp", "mcp-server", "vivado", "fpga", "xilinx", "amd", "eda", "tcl", "ai"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -42,6 +42,7 @@ vivado-mcp-win-doctor = "vivado_mcp.doctor:main"
 Homepage = "https://github.com/Arthurzxy/vivado_mcp_native"
 Repository = "https://github.com/Arthurzxy/vivado_mcp_native"
 Issues = "https://github.com/Arthurzxy/vivado_mcp_native/issues"
+"MCP Registry" = "https://registry.modelcontextprotocol.io/?q=io.github.Arthurzxy%2Fvivado-mcp-native"
 
 [tool.setuptools]
 packages = ["vivado_mcp"]

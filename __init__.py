@@ -49,14 +49,14 @@ Requirements:
 
 Author: Arthurzxy
 License: MIT
-Version: 0.2.0
+Version: 0.2.1
 """
 
 import asyncio
 
 from .server import main as _async_main
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 def main():

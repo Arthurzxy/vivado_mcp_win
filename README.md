@@ -1,5 +1,7 @@
 # Vivado MCP Native
 
+<!-- mcp-name: io.github.Arthurzxy/vivado-mcp-native -->
+
 **English** | [简体中文](https://github.com/Arthurzxy/vivado_mcp_native/blob/master/README.zh-CN.md)
 
 A cross-platform Model Context Protocol (MCP) server for **AMD/Xilinx Vivado**. It lets MCP-compatible AI clients start and manage Vivado, open projects, run synthesis and implementation, inspect timing and utilization, control simulation, and execute Tcl commands.
@@ -72,6 +74,16 @@ py -3.11 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --upgrade pip
 & "$venv\Scripts\python.exe" -m pip install --upgrade vivado-mcp-native
 ```
+
+## Official MCP Registry
+
+The server identity used by the official MCP Registry is:
+
+```text
+io.github.Arthurzxy/vivado-mcp-native
+```
+
+Registry metadata is stored in [`server.json`](server.json). The PyPI package uses the hidden `mcp-name` marker near the top of this README for package ownership verification. Version `0.2.1` is the first release prepared for official Registry publication.
 
 ## Select the Vivado installation
 
