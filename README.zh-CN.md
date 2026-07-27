@@ -1,6 +1,6 @@
 # Vivado MCP Native
 
-[English](README.md) | **简体中文**
+[English](https://github.com/Arthurzxy/vivado_mcp_native/blob/master/README.md) | **简体中文**
 
 这是一个面向 **AMD/Xilinx Vivado** 的跨平台 Model Context Protocol（MCP）服务器。它允许兼容 MCP 的 AI 客户端启动和管理 Vivado、打开工程、运行综合与实现、查看时序和资源利用率、控制仿真，以及执行 Tcl 命令。
 
@@ -10,7 +10,7 @@
 > 本项目不包含 Vivado。可用的器件支持、授权功能和 FPGA 系列取决于主机上安装的 Vivado 及其许可证。
 
 > [!WARNING]
-> PyPI 上的 `vivado-mcp` 名称属于另一个项目。请直接从 GitHub 安装本仓库，不要使用不带来源地址的 `pip install vivado-mcp`。
+> PyPI 上的 `vivado-mcp` 名称属于另一个项目。本项目的发行名称为 `vivado-mcp-native`。
 
 ## 主要特性
 
@@ -21,7 +21,7 @@
 - 使用 UTF-8 十六进制传输，可靠处理引号、花括号、反斜杠、多行 Tcl、Unicode 和 Windows 路径。
 - 命令超时后清理完整的 Vivado 进程树，避免残留失步会话。
 - 支持通过 `VIVADO_PATH`、系统 PATH 和常见安装目录自动发现 Vivado。
-- 提供 `vivado-mcp-win-doctor` 命令，用于检查本机 Python 到 Vivado 的连接状态。
+- 提供 `vivado-mcp-native-doctor` 命令，用于检查本机 Python 到 Vivado 的连接状态。
 
 ## 环境要求
 
@@ -34,41 +34,43 @@
 
 ## 安装
 
-### 从 GitHub 使用 pipx 安装（推荐）
+### 从 PyPI 安装（推荐）
 
-`pipx` 会为程序创建独立的 Python 环境，并将命令行入口加入用户 PATH。
-
-#### Windows PowerShell
+推荐使用 `pipx` 创建隔离环境并安装命令行程序：
 
 ```powershell
 py -m pip install --user --upgrade pipx
 py -m pipx ensurepath
-py -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+py -m pipx install vivado-mcp-native
 ```
 
-执行 `ensurepath` 后，如命令仍不可用，请重新打开终端。
-
-#### Linux
+Linux：
 
 ```bash
 python3 -m pip install --user --upgrade pipx
 python3 -m pipx ensurepath
-python3 -m pipx install "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+python3 -m pipx install vivado-mcp-native
 ```
 
 安装后可用的命令：
 
-- `vivado-mcp-win`：启动 MCP 服务器；
-- `vivado-mcp-win-doctor`：检查本机 Vivado 连接；
-- `vivado-mcp` 和 `vivado-mcp-doctor`：兼容别名。
+- `vivado-mcp-native`：启动 MCP 服务器；
+- `vivado-mcp-native-doctor`：检查本机 Vivado 连接；
+- `vivado-mcp-win` 和 `vivado-mcp-win-doctor`：兼容别名。
+
+### 从 GitHub 安装最新源码
+
+```powershell
+py -m pipx install --force "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+```
 
 ### 安装到独立虚拟环境
 
 ```powershell
-$venv = "$env:LOCALAPPDATA\vivado-mcp-win"
+$venv = "$env:LOCALAPPDATA\vivado-mcp-native"
 py -3.11 -m venv $venv
 & "$venv\Scripts\python.exe" -m pip install --upgrade pip
-& "$venv\Scripts\python.exe" -m pip install --upgrade "https://github.com/Arthurzxy/vivado_mcp_native/archive/refs/heads/master.zip"
+& "$venv\Scripts\python.exe" -m pip install --upgrade vivado-mcp-native
 ```
 
 ## 选择 Vivado 安装位置
@@ -98,13 +100,13 @@ C:\Program Files\AMD\Vivado\*\bin\vivado.bat
 建议在配置 MCP 客户端之前先运行诊断命令：
 
 ```powershell
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
+vivado-mcp-native-doctor --vivado-path "D:\Xilinx\Vivado\2025.2\bin\vivado.bat"
 ```
 
 路径也可以是 Vivado 的 `bin` 目录或版本目录。使用 `--json` 可以获得机器可读的输出：
 
 ```powershell
-vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
+vivado-mcp-native-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 ```
 
 诊断命令会完成以下操作：
@@ -123,7 +125,7 @@ vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 查找已安装命令的绝对路径：
 
 ```powershell
-(Get-Command vivado-mcp-win).Source
+(Get-Command vivado-mcp-native).Source
 ```
 
 ### pipx 安装方式示例
@@ -132,7 +134,7 @@ vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 {
   "mcpServers": {
     "vivado": {
-      "command": "C:\\Users\\you\\.local\\bin\\vivado-mcp-win.exe",
+      "command": "C:\\Users\\you\\.local\\bin\\vivado-mcp-native.exe",
       "env": {
         "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
       }
@@ -147,7 +149,7 @@ vivado-mcp-win-doctor --vivado-path "D:\Xilinx\Vivado\2025.2" --json
 {
   "mcpServers": {
     "vivado": {
-      "command": "C:\\Users\\you\\AppData\\Local\\vivado-mcp-win\\Scripts\\python.exe",
+      "command": "C:\\Users\\you\\AppData\\Local\\vivado-mcp-native\\Scripts\\python.exe",
       "args": ["-m", "vivado_mcp"],
       "env": {
         "VIVADO_PATH": "D:\\Xilinx\\Vivado\\2025.2\\bin\\vivado.bat"
@@ -195,7 +197,7 @@ AMD/Xilinx Vivado -mode tcl
 & "D:\Xilinx\Vivado\2025.2\bin\vivado.bat" -mode tcl
 ```
 
-随后运行 `vivado-mcp-win-doctor`，检查路径、Vivado 安装、用户权限、环境变量和许可证配置。
+随后运行 `vivado-mcp-native-doctor`，检查路径、Vivado 安装、用户权限、环境变量和许可证配置。
 
 ### 中文输出乱码
 
@@ -211,7 +213,7 @@ $env:VIVADO_MCP_OUTPUT_ENCODING = "gbk"
 
 ```powershell
 py -m pipx ensurepath
-(Get-Command vivado-mcp-win).Source
+(Get-Command vivado-mcp-native).Source
 ```
 
 将返回的绝对路径写入 MCP 客户端配置，并在修改配置后重启客户端。
