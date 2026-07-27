@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "distribution": "vivado-mcp-native",
+  "version": "0.2.0",
+  "module_version": "0.2.0",
+  "console_scripts": [
+    "vivado-mcp-native",
+    "vivado-mcp-native-doctor",
+    "vivado-mcp-win",
+    "vivado-mcp-win-doctor"
+  ],
+  "missing_console_scripts": []
+}
